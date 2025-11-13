@@ -72,7 +72,7 @@ async def process_score(
     finally:
         temp_path.unlink(missing_ok=True)
 
-    base_url = settings.public_base_url.rstrip("/")
+    base_url = str(settings.public_base_url).rstrip("/")
     musicxml_url = f"{base_url}/api/files/musicxml/{result.result_id}"
 
     return {
