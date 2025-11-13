@@ -26,6 +26,7 @@ Este repositorio contiene una aplicación sencilla que permite convertir imágen
    ```bash
    pip install -r requirements.txt
    ```
+   - Las dependencias incluyen `pypdf`, utilizada para extraer páginas individuales de PDFs multipágina.
 3. Definir las variables de entorno necesarias (pueden ir en un archivo `.env` en la carpeta `backend/`):
    ```env
    OMR_ALLOWED_ORIGINS=https://tuusuario.github.io/omr-webapp/,https://tu-dominio.com
@@ -56,14 +57,21 @@ Este repositorio contiene una aplicación sencilla que permite convertir imágen
 
 El frontend valida el tipo y tamaño del archivo antes de enviarlo, muestra estados informativos durante el procesamiento y presenta mensajes de error normalizados si algo falla.
 
+### Soporte para PDFs multipágina
+
+- Cuando se selecciona un PDF, la interfaz muestra un selector para elegir qué página se procesará.
+- El navegador intenta detectar automáticamente cuántas páginas tiene el documento (usando PDF.js). Si no puede determinarlo, seguirá permitiendo que se indique manualmente.
+- El backend valida el número de página recibido y, si el PDF contiene varias páginas, extrae únicamente la solicitada antes de invocar Audiveris.
+
 ## Flujo completo de uso
 
 1. El usuario abre la página en GitHub Pages.
 2. Selecciona un archivo de imagen o PDF (≤ 10 MB).
 3. El frontend envía el archivo al backend y muestra el estado del proceso.
 4. El backend ejecuta Audiveris (o genera un resultado ficticio) y guarda el MusicXML en `backend/output/`.
-5. La respuesta JSON incluye la URL para descargar el MusicXML generado.
-6. El frontend muestra un botón **Descargar MusicXML** con el identificador del resultado.
+5. Para PDFs multipágina, el backend sólo procesa la página solicitada.
+6. La respuesta JSON incluye la URL para descargar el MusicXML generado y metadatos con la página procesada.
+7. El frontend muestra un botón **Descargar MusicXML** con el identificador del resultado y, en su caso, la página indicada.
 
 ## Comprobaciones recomendadas
 

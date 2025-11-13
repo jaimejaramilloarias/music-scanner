@@ -10,7 +10,9 @@ import textwrap
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Tuple
+from typing import Iterable
+
+from pypdf import PdfReader, PdfWriter
 
 from app.core import settings
 
@@ -27,9 +29,11 @@ class OMRResult:
 
     result_id: str
     musicxml_path: Path
+    page_number: int | None = None
+    total_pages: int | None = None
 
 
-def run_omr(input_path: Path) -> OMRResult:
+def run_omr(input_path: Path, *, page: int | None = None) -> OMRResult:
     """Ejecuta el flujo de OMR y devuelve un resultado listo para descargar.
 
     El procesamiento intentará utilizar Audiveris si se ha configurado un comando
@@ -43,9 +47,12 @@ def run_omr(input_path: Path) -> OMRResult:
             f"El archivo de entrada '{input_path}' no existe o fue eliminado antes de ejecutar OMR."
         )
 
+    prepared_path, page_number, total_pages = _prepare_input_for_omr(input_path, page)
+    source_name = input_path.name
+
     try:
         if settings.audiveris_command:
-            musicxml_path = _run_with_audiveris(input_path)
+            musicxml_path = _run_with_audiveris(prepared_path)
         else:
             raise OMRProcessingError(
                 "No se configuró el comando de Audiveris. Se utilizará un resultado ficticio."
@@ -54,10 +61,18 @@ def run_omr(input_path: Path) -> OMRResult:
         if not settings.enable_stub_omr:
             raise
         logger.warning("Fallo al ejecutar Audiveris: %s", exc)
-        musicxml_path = _generate_stub_result(input_path)
+        musicxml_path = _generate_stub_result(source_name, page_number=page_number)
+    finally:
+        if prepared_path is not input_path:
+            prepared_path.unlink(missing_ok=True)
 
     result_id, stored_path = _store_musicxml_result(musicxml_path)
-    return OMRResult(result_id=result_id, musicxml_path=stored_path)
+    return OMRResult(
+        result_id=result_id,
+        musicxml_path=stored_path,
+        page_number=page_number,
+        total_pages=total_pages,
+    )
 
 
 def resolve_musicxml_path(result_id: str) -> Path:
@@ -70,6 +85,20 @@ def resolve_musicxml_path(result_id: str) -> Path:
     if not target_path.exists():
         raise FileNotFoundError(result_id)
     return target_path
+
+
+def _prepare_input_for_omr(
+    input_path: Path, page: int | None
+) -> tuple[Path, int | None, int | None]:
+    """Normaliza el archivo de entrada para Audiveris, extrayendo páginas si es necesario."""
+
+    if input_path.suffix.lower() != ".pdf":
+        if page is not None and page < 1:
+            raise OMRProcessingError("El número de página debe ser mayor o igual a 1.")
+        normalized_page = page if page and page > 0 else None
+        return input_path, normalized_page, None
+
+    return _extract_pdf_page(input_path, page)
 
 
 def _run_with_audiveris(input_path: Path) -> Path:
@@ -117,8 +146,53 @@ def _run_with_audiveris(input_path: Path) -> Path:
 
 
 
-def _generate_stub_result(input_path: Path) -> Path:
+def _extract_pdf_page(original_path: Path, page: int | None) -> tuple[Path, int, int]:
+    """Extrae una única página de un PDF para enviarla a Audiveris."""
+
+    try:
+        reader = PdfReader(str(original_path))
+    except Exception as exc:  # pragma: no cover - dependencias externas
+        raise OMRProcessingError("No se pudo leer el PDF proporcionado.") from exc
+
+    total_pages = len(reader.pages)
+    if total_pages == 0:
+        raise OMRProcessingError("El PDF proporcionado no contiene páginas.")
+
+    target_page = 1 if page is None else page
+    if target_page < 1:
+        raise OMRProcessingError("El número de página debe ser mayor o igual a 1.")
+    if target_page > total_pages:
+        raise OMRProcessingError(
+            f"La página solicitada ({target_page}) está fuera de rango. El PDF tiene {total_pages} páginas."
+        )
+
+    writer = PdfWriter()
+    writer.add_page(reader.pages[target_page - 1])
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        writer.write(tmp_file)
+        temp_path = Path(tmp_file.name)
+
+    return temp_path, target_page, total_pages
+
+
+
+def _generate_stub_result(
+    source_name: str,
+    *,
+    page_number: int | None = None,
+) -> Path:
     """Genera un archivo MusicXML mínimo para mantener el flujo funcional."""
+
+    encoding_block = ""
+    if page_number:
+        encoding_block = textwrap.dedent(
+            f"""
+              <encoding>
+                <software>Página solicitada: {page_number}</software>
+              </encoding>
+            """
+        ).strip()
 
     stub_content = textwrap.dedent(
         f"""
@@ -127,10 +201,11 @@ def _generate_stub_result(input_path: Path) -> Path:
               "http://www.musicxml.org/dtds/partwise.dtd">
             <score-partwise version="4.0">
               <work>
-                <work-title>Resultado ficticio para {input_path.name}</work-title>
+                <work-title>Resultado ficticio para {source_name}</work-title>
               </work>
               <identification>
                 <creator type="software">Music Scanner (modo demostración)</creator>
+                {encoding_block}
               </identification>
               <part-list>
                 <score-part id="P1">
@@ -174,7 +249,7 @@ def _generate_stub_result(input_path: Path) -> Path:
 
 
 
-def _store_musicxml_result(musicxml_path: Path) -> Tuple[str, Path]:
+def _store_musicxml_result(musicxml_path: Path) -> tuple[str, Path]:
     """Mueve el archivo MusicXML generado a la carpeta de resultados definitiva."""
 
     if not musicxml_path.exists():
