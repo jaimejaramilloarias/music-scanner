@@ -19,13 +19,13 @@
 - [ ] Validar el flujo completo entre GitHub Pages y el backend en ejecución.
 
 ## Fase 4 – Integración con Audiveris (MusicXML)
-- [ ] Implementar `run_omr` en `backend/app/services` para invocar Audiveris.
-- [ ] Actualizar `POST /api/omr` para devolver la URL del MusicXML.
-- [ ] Crear el endpoint de descarga de archivos MusicXML.
+- [x] Implementar `run_omr` en `backend/app/services` para invocar Audiveris.
+- [x] Actualizar `POST /api/omr` para devolver la URL del MusicXML.
+- [x] Crear el endpoint de descarga de archivos MusicXML.
 
 ## Fase 5 – Mostrar enlace de descarga en el frontend
-- [ ] Mostrar el enlace de descarga en `docs/app.js` cuando el backend responda con éxito.
-- [ ] Ajustar los mensajes de estado para reflejar el progreso del procesamiento.
+- [x] Mostrar el enlace de descarga en `docs/app.js` cuando el backend responda con éxito.
+- [x] Ajustar los mensajes de estado para reflejar el progreso del procesamiento.
 
 ## Fase 6 – Manejo de errores y validaciones
 - [ ] Implementar validaciones de tamaño y tipo de archivo tanto en frontend como en backend.
