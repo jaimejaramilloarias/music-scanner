@@ -85,6 +85,11 @@ El frontend valida el tipo y tamaño del archivo antes de enviarlo, muestra esta
 - Revisar los archivos generados en `backend/output/` para limpiar periódicamente resultados antiguos.
 - Configurar HTTPS en el backend si se despliega públicamente.
 
+## Pruebas automatizadas
+
+- Instalar las dependencias de desarrollo (por ejemplo, `pip install pytest`).
+- Ejecutar `pytest` dentro de la carpeta `backend/` para validar el flujo extremo a extremo simulado con el stub de Audiveris.
+
 ## Licencia
 
 Este proyecto se distribuye con fines educativos. Ajusta la licencia según las necesidades de tu despliegue.

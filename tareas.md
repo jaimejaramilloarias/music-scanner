@@ -16,7 +16,7 @@
 ## Fase 3 – Subida de archivo desde el frontend
 - [x] Implementar en `app.js` el envío real del archivo mediante `fetch`.
 - [x] Añadir en el backend el manejo del archivo recibido y responder con datos de prueba.
-- [ ] Validar el flujo completo entre GitHub Pages y el backend en ejecución.
+- [x] Validar el flujo completo entre GitHub Pages y el backend en ejecución.
 
 ## Fase 4 – Integración con Audiveris (MusicXML)
 - [x] Implementar `run_omr` en `backend/app/services` para invocar Audiveris.
