@@ -13,8 +13,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
-from pypdf import PdfReader, PdfWriter
-
 from app.core import settings
 
 logger = logging.getLogger(__name__)
@@ -189,6 +187,8 @@ def _run_with_audiveris(
 
 def _extract_pdf_page(original_path: Path, page: int | None) -> tuple[Path, int, int]:
     """Extrae una única página de un PDF para enviarla a Audiveris."""
+
+    from pypdf import PdfReader, PdfWriter
 
     try:
         reader = PdfReader(str(original_path))
