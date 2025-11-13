@@ -1,6 +1,7 @@
 """Endpoints relacionados con el procesamiento OMR."""
 
 from pathlib import Path
+import shlex
 import tempfile
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
@@ -22,6 +23,8 @@ MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 async def process_score(
     file: UploadFile = File(...),
     page: int | None = Form(default=None),
+    processing_mode: str | None = Form(default=None),
+    advanced_options: str | None = Form(default=None),
 ) -> dict[str, object]:
     """Recibe un archivo del frontend, ejecuta OMR y genera un enlace de descarga."""
 
@@ -57,13 +60,38 @@ async def process_score(
             detail="El número de página debe ser mayor o igual a 1.",
         )
 
+    available_modes = {mode.lower() for mode in settings.available_processing_modes}
+    selected_mode = (processing_mode or settings.default_processing_mode).strip().lower()
+    if selected_mode not in available_modes:
+        modes_text = ", ".join(sorted(available_modes))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=
+            f"El modo de procesamiento indicado no es válido. Modos permitidos: {modes_text}.",
+        )
+
+    try:
+        extra_arguments = (
+            [argument for argument in shlex.split(advanced_options)] if advanced_options else []
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se pudieron interpretar los parámetros adicionales enviados.",
+        ) from exc
+
     suffix = extension or ".tmp"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
         tmp_file.write(file_bytes)
         temp_path = Path(tmp_file.name)
 
     try:
-        result = run_omr(temp_path, page=page)
+        result = run_omr(
+            temp_path,
+            page=page,
+            processing_mode=selected_mode,
+            extra_cli_arguments=extra_arguments,
+        )
     except OMRProcessingError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -82,6 +110,8 @@ async def process_score(
         "original_filename": file.filename,
         "page_number": result.page_number,
         "total_pages": result.total_pages,
+        "processing_mode": result.processing_mode,
+        "applied_cli_arguments": list(result.applied_arguments),
     }
 
 

@@ -91,6 +91,68 @@ body {
   color: rgba(27, 27, 31, 0.75);
 }
 
+.advanced-options {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background-color: rgba(27, 27, 31, 0.04);
+  border-left: 4px solid rgba(27, 27, 31, 0.12);
+}
+
+.advanced-options > summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+
+.advanced-options[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+.advanced-options summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-options summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 0.5rem;
+  transition: transform 0.2s ease;
+}
+
+.advanced-options[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.advanced-options-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.advanced-options-label {
+  font-weight: 600;
+}
+
+.advanced-options-select,
+.advanced-options-input {
+  padding: 0.45rem 0.6rem;
+  font-size: 1rem;
+  border-radius: 6px;
+  border: 1px solid rgba(27, 27, 31, 0.25);
+}
+
+.advanced-options-input::placeholder {
+  color: rgba(27, 27, 31, 0.45);
+}
+
+.advanced-options-help {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(27, 27, 31, 0.65);
+}
+
 #processButton {
   padding: 0.75rem 1.5rem;
   font-size: 1rem;
@@ -208,6 +270,17 @@ body {
   font-size: 0.95rem;
 }
 
+.download-processing-mode,
+.download-extra-options {
+  margin: 0;
+  color: rgba(27, 27, 31, 0.7);
+  font-size: 0.95rem;
+}
+
+.download-extra-options {
+  font-style: italic;
+}
+
 .history-list {
   margin: 0;
   padding-left: 1.25rem;
@@ -238,6 +311,13 @@ body {
 .history-actions {
   display: flex;
   gap: 0.5rem;
+}
+
+.history-advanced {
+  margin: 0.15rem 0 0;
+  color: rgba(27, 27, 31, 0.6);
+  font-size: 0.85rem;
+  font-style: italic;
 }
 
 .history-link {
