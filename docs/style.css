@@ -87,6 +87,22 @@ body {
   color: rgba(27, 27, 31, 0.7);
 }
 
+.json-result {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.5rem 1rem;
+}
+
+.json-result dt {
+  font-weight: 600;
+}
+
+.json-result dd {
+  margin: 0;
+  word-break: break-word;
+}
+
 code {
   font-family: 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
 }

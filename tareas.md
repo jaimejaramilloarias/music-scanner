@@ -10,12 +10,12 @@
 - [x] Inicializar el esqueleto del backend con FastAPI y un endpoint de salud.
 
 ## Fase 2 – Backend mínimo + endpoint de salud
-- [ ] Completar la configuración de CORS con los dominios definitivos de GitHub Pages.
-- [ ] Probar localmente `uvicorn main:app --reload` y verificar `GET /api/health`.
+- [x] Completar la configuración de CORS con los dominios definitivos de GitHub Pages.
+- [x] Probar localmente `uvicorn main:app --reload` y verificar `GET /api/health`.
 
 ## Fase 3 – Subida de archivo desde el frontend
-- [ ] Implementar en `app.js` el envío real del archivo mediante `fetch`.
-- [ ] Añadir en el backend el manejo del archivo recibido y responder con datos de prueba.
+- [x] Implementar en `app.js` el envío real del archivo mediante `fetch`.
+- [x] Añadir en el backend el manejo del archivo recibido y responder con datos de prueba.
 - [ ] Validar el flujo completo entre GitHub Pages y el backend en ejecución.
 
 ## Fase 4 – Integración con Audiveris (MusicXML)

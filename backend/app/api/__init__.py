@@ -2,9 +2,10 @@
 
 from fastapi import FastAPI
 
-from .routes import health
+from .routes import health, omr
 
 
 def include_routers(app: FastAPI) -> None:
     """Incluye los routers principales en la aplicación."""
     app.include_router(health.router, prefix="/api")
+    app.include_router(omr.router, prefix="/api")
