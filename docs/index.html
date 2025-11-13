@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Conversor OMR a MusicXML</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="config.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Conversor de partituras a MusicXML</h1>
+      <p>Sube una imagen de una partitura y obtén un archivo MusicXML procesado por el backend OMR.</p>
+    </header>
+
+    <main class="app-main">
+      <section class="upload-section">
+        <label for="scoreFile" class="upload-label">Selecciona una imagen:</label>
+        <input id="scoreFile" type="file" accept=".png,.jpg,.jpeg,.pdf" />
+        <button id="processButton" type="button">Procesar partitura</button>
+      </section>
+
+      <section class="status-section">
+        <h2>Estado</h2>
+        <p id="status" class="status-message">Sin operaciones en curso.</p>
+      </section>
+
+      <section class="results-section">
+        <h2>Resultados</h2>
+        <div id="results" class="results-container">
+          <p class="placeholder">Aquí aparecerá el enlace para descargar el MusicXML.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <small>
+        Configura la URL del backend en <code>docs/config.js</code> antes de desplegar en GitHub Pages.
+      </small>
+    </footer>
+  </body>
+</html>
