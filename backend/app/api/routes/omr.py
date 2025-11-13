@@ -12,6 +12,10 @@ from app.services import OMRProcessingError, run_omr, resolve_musicxml_path
 router = APIRouter(tags=["omr"])
 
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".pdf"}
+#: Extensiones de archivo admitidas para el procesamiento OMR.
+
+MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+#: Tamaño máximo permitido (en bytes) para los archivos recibidos.
 
 
 @router.post("/omr", summary="Procesa una partitura y devuelve la URL del MusicXML")
@@ -36,6 +40,12 @@ async def process_score(file: UploadFile = File(...)) -> dict[str, object]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El archivo recibido está vacío.",
+        )
+
+    if len(file_bytes) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="El archivo supera el tamaño máximo permitido de 10 MB.",
         )
 
     suffix = extension or ".tmp"

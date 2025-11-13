@@ -69,14 +69,29 @@ body {
 
 .status-message {
   margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  background-color: rgba(27, 27, 31, 0.05);
+  border-left: 4px solid rgba(27, 27, 31, 0.1);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.status-message.info {
+  color: #1b1b1f;
+  background-color: rgba(76, 81, 191, 0.1);
+  border-color: rgba(76, 81, 191, 0.4);
 }
 
 .status-message.error {
-  color: #9b1c1c;
+  color: #7b1d1d;
+  background-color: rgba(229, 62, 62, 0.12);
+  border-color: rgba(229, 62, 62, 0.55);
 }
 
 .status-message.success {
   color: #1c7b2c;
+  background-color: rgba(46, 160, 67, 0.12);
+  border-color: rgba(46, 160, 67, 0.45);
 }
 
 .results-container {

@@ -4,15 +4,13 @@
   const statusElement = document.getElementById('status');
   const resultsContainer = document.getElementById('results');
 
+  const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+  const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'pdf'];
+
   function setStatus(message, type = 'info') {
     statusElement.textContent = message;
-    statusElement.classList.remove('error', 'success');
-    if (type === 'error') {
-      statusElement.classList.add('error');
-    }
-    if (type === 'success') {
-      statusElement.classList.add('success');
-    }
+    statusElement.classList.remove('info', 'error', 'success');
+    statusElement.classList.add(type);
   }
 
   function resetResults() {
@@ -50,6 +48,32 @@
     resultsContainer.appendChild(wrapper);
   }
 
+  function extractErrorMessage(payload, fallback = 'No se pudo procesar la partitura.') {
+    if (!payload || typeof payload !== 'object') {
+      return fallback;
+    }
+
+    if (typeof payload.message === 'string' && payload.message.trim()) {
+      return payload.message;
+    }
+
+    if (typeof payload.detail === 'string' && payload.detail.trim()) {
+      return payload.detail;
+    }
+
+    if (Array.isArray(payload.errors) && payload.errors.length > 0) {
+      const details = payload.errors
+        .map((error) => error?.msg)
+        .filter(Boolean)
+        .join('; ');
+      if (details) {
+        return details;
+      }
+    }
+
+    return fallback;
+  }
+
   async function sendFile(file) {
     const formData = new FormData();
     formData.append('file', file);
@@ -65,14 +89,27 @@
 
       setStatus('Procesando respuesta del backend…');
 
-      const payload = await response.json();
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch (parseError) {
+        console.warn('No se pudo interpretar la respuesta del backend como JSON.', parseError);
+      }
+
       if (!response.ok) {
-        const message = payload?.detail || 'No se pudo procesar la partitura.';
+        const message = extractErrorMessage(
+          payload,
+          `No se pudo procesar la partitura (código ${response.status}).`,
+        );
         throw new Error(message);
       }
 
+      if (!payload) {
+        throw new Error('La respuesta del backend no tiene el formato esperado.');
+      }
+
       if (payload.status && payload.status !== 'ok') {
-        const message = payload?.message || payload?.detail || 'No se pudo procesar la partitura.';
+        const message = extractErrorMessage(payload);
         throw new Error(message);
       }
 
@@ -98,10 +135,15 @@
       return;
     }
 
-    const allowedExtensions = ['png', 'jpg', 'jpeg', 'pdf'];
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
-    if (!fileExtension || !allowedExtensions.includes(fileExtension)) {
+    if (!fileExtension || !ALLOWED_EXTENSIONS.includes(fileExtension)) {
       setStatus('Formato no soportado. Usa PNG, JPG, JPEG o PDF.', 'error');
+      resetResults();
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setStatus('El archivo supera el tamaño máximo permitido (10 MB).', 'error');
       resetResults();
       return;
     }

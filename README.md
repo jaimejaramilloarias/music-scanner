@@ -1,0 +1,76 @@
+# Music Scanner – Conversor OMR a MusicXML
+
+Este repositorio contiene una aplicación sencilla que permite convertir imágenes de partituras en archivos MusicXML mediante un backend basado en FastAPI. El frontend se aloja en GitHub Pages y consume la API del backend para gestionar el procesamiento OMR.
+
+## Estructura del proyecto
+
+- `docs/`: archivos estáticos del frontend (HTML, CSS y JavaScript) servidos por GitHub Pages.
+- `backend/`: aplicación FastAPI con los endpoints necesarios para recibir archivos, ejecutar el motor OMR y entregar los resultados.
+- `tareas.md`: lista de tareas planificadas para el desarrollo incremental.
+
+## Requisitos previos
+
+- Python 3.10 o superior.
+- Acceso a un comando de Audiveris instalado en el entorno donde se ejecutará el backend (opcional si se usa el modo "stub").
+- Node/npm **no** son necesarios; el frontend es JavaScript plano.
+
+## Configuración del backend
+
+1. Crear un entorno virtual y activar:
+   ```bash
+   cd backend
+   python -m venv .venv
+   source .venv/bin/activate  # En Windows usa `.venv\Scripts\activate`
+   ```
+2. Instalar dependencias:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Definir las variables de entorno necesarias (pueden ir en un archivo `.env` en la carpeta `backend/`):
+   ```env
+   OMR_ALLOWED_ORIGINS=https://tuusuario.github.io/omr-webapp/,https://tu-dominio.com
+   OMR_PUBLIC_BASE_URL=https://tu-backend.example.com
+   OMR_AUDIVERIS_COMMAND="/ruta/a/audiveris -batch"
+   OMR_ENABLE_STUB_OMR=true
+   ```
+   - `OMR_ALLOWED_ORIGINS`: lista separada por comas con los orígenes autorizados para CORS.
+   - `OMR_PUBLIC_BASE_URL`: URL pública del backend (se usa para construir los enlaces de descarga).
+   - `OMR_AUDIVERIS_COMMAND`: comando completo para ejecutar Audiveris. Si no se indica y `OMR_ENABLE_STUB_OMR=true`, se generará un MusicXML de prueba.
+   - `OMR_ENABLE_STUB_OMR`: permite habilitar un resultado ficticio cuando Audiveris no está disponible.
+
+4. Ejecutar el backend en desarrollo:
+   ```bash
+   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+
+### Límite de tamaño y tipos de archivo
+
+- El backend valida que el archivo recibido tenga extensión `.png`, `.jpg`, `.jpeg` o `.pdf`.
+- También rechaza archivos mayores a **10 MB** devolviendo una respuesta JSON normalizada con un mensaje claro.
+
+## Configuración del frontend
+
+1. Editar `docs/config.js` y actualizar `OMR_API_BASE_URL` con la URL real del backend.
+2. Publicar la carpeta `docs/` mediante GitHub Pages (ramas principales -> carpeta `/docs`).
+3. Abrir la página en el navegador, seleccionar una partitura y pulsar **Procesar partitura**.
+
+El frontend valida el tipo y tamaño del archivo antes de enviarlo, muestra estados informativos durante el procesamiento y presenta mensajes de error normalizados si algo falla.
+
+## Flujo completo de uso
+
+1. El usuario abre la página en GitHub Pages.
+2. Selecciona un archivo de imagen o PDF (≤ 10 MB).
+3. El frontend envía el archivo al backend y muestra el estado del proceso.
+4. El backend ejecuta Audiveris (o genera un resultado ficticio) y guarda el MusicXML en `backend/output/`.
+5. La respuesta JSON incluye la URL para descargar el MusicXML generado.
+6. El frontend muestra un botón **Descargar MusicXML** con el identificador del resultado.
+
+## Comprobaciones recomendadas
+
+- Ejecutar `uvicorn` en local y comprobar `GET /api/health` y `POST /api/omr` usando la página del frontend o herramientas como `curl`/`HTTPie`.
+- Revisar los archivos generados en `backend/output/` para limpiar periódicamente resultados antiguos.
+- Configurar HTTPS en el backend si se despliega públicamente.
+
+## Licencia
+
+Este proyecto se distribuye con fines educativos. Ajusta la licencia según las necesidades de tu despliegue.

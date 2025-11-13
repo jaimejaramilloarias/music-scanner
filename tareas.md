@@ -28,13 +28,13 @@
 - [x] Ajustar los mensajes de estado para reflejar el progreso del procesamiento.
 
 ## Fase 6 – Manejo de errores y validaciones
-- [ ] Implementar validaciones de tamaño y tipo de archivo tanto en frontend como en backend.
-- [ ] Normalizar las respuestas de error y mostrarlas en la interfaz.
+- [x] Implementar validaciones de tamaño y tipo de archivo tanto en frontend como en backend.
+- [x] Normalizar las respuestas de error y mostrarlas en la interfaz.
 
 ## Fase 7 – Limpieza, estilos y documentación
-- [ ] Mejorar los estilos en `docs/style.css` para estados “ok” y “error”.
-- [ ] Documentar la configuración y despliegue en `README.md`.
-- [ ] Organizar módulos y añadir documentación en el backend.
+- [x] Mejorar los estilos en `docs/style.css` para estados “ok” y “error”.
+- [x] Documentar la configuración y despliegue en `README.md`.
+- [x] Organizar módulos y añadir documentación en el backend.
 
 ## Extensiones futuras (opcionales)
 - [ ] Soporte para PDFs multipágina.
