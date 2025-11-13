@@ -19,21 +19,35 @@
     resultsContainer.innerHTML = '<p class="placeholder">Aquí aparecerá el enlace para descargar el MusicXML.</p>';
   }
 
-  function renderJsonResult(payload) {
-    const list = document.createElement('dl');
-    list.className = 'json-result';
+  function renderDownloadResult(url, originalFilename, resultId) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'download-result';
 
-    Object.entries(payload).forEach(([key, value]) => {
-      const term = document.createElement('dt');
-      term.textContent = key;
-      const definition = document.createElement('dd');
-      definition.textContent = String(value);
-      list.appendChild(term);
-      list.appendChild(definition);
-    });
+    const info = document.createElement('p');
+    info.className = 'download-info';
+    info.textContent = originalFilename
+      ? `Resultado para “${originalFilename}”`
+      : 'Resultado disponible para su descarga';
+
+    const link = document.createElement('a');
+    link.className = 'download-link';
+    link.href = url;
+    link.textContent = 'Descargar MusicXML';
+    link.target = '_blank';
+    link.rel = 'noopener';
+
+    const identifier = document.createElement('p');
+    identifier.className = 'download-id';
+    identifier.textContent = resultId ? `ID de referencia: ${resultId}` : '';
+
+    wrapper.appendChild(info);
+    wrapper.appendChild(link);
+    if (resultId) {
+      wrapper.appendChild(identifier);
+    }
 
     resultsContainer.innerHTML = '';
-    resultsContainer.appendChild(list);
+    resultsContainer.appendChild(wrapper);
   }
 
   async function sendFile(file) {
@@ -49,14 +63,25 @@
         body: formData,
       });
 
+      setStatus('Procesando respuesta del backend…');
+
       const payload = await response.json();
       if (!response.ok) {
         const message = payload?.detail || 'No se pudo procesar la partitura.';
         throw new Error(message);
       }
 
-      renderJsonResult(payload);
-      setStatus('Archivo recibido correctamente por el backend.', 'success');
+      if (payload.status && payload.status !== 'ok') {
+        const message = payload?.message || payload?.detail || 'No se pudo procesar la partitura.';
+        throw new Error(message);
+      }
+
+      if (!payload.musicxml_url) {
+        throw new Error('La respuesta del backend no incluye el enlace de descarga.');
+      }
+
+      renderDownloadResult(payload.musicxml_url, payload.original_filename, payload.result_id);
+      setStatus('Conversión completada. Descarga disponible.', 'success');
     } catch (error) {
       console.error(error);
       setStatus(error.message || 'Error inesperado al contactar con el backend.', 'error');
@@ -81,6 +106,7 @@
       return;
     }
 
+    setStatus('Preparando archivo para enviar…');
     sendFile(file);
   }
 
