@@ -5,8 +5,8 @@ import shlex
 from pathlib import Path
 from typing import List, Optional
 
-from pydantic import AnyHttpUrl, validator
-from pydantic_settings import BaseSettings
+from pydantic import AnyHttpUrl, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -28,19 +28,20 @@ class Settings(BaseSettings):
     audiveris_timeout: int = 300
     enable_stub_omr: bool = True
 
-    class Config:
-        env_prefix = "omr_"
-        env_file = ".env"
+    model_config = SettingsConfigDict(
+        env_prefix="omr_",
+        env_file=".env",
+    )
 
-    @validator("allowed_origins", pre=True)
-    def parse_allowed_origins(cls, value):  # type: ignore[override]
+    @field_validator("allowed_origins", mode="before")
+    def parse_allowed_origins(cls, value):
         """Permite definir los orígenes como cadena separada por comas."""
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
-    @validator("audiveris_command", pre=True)
-    def parse_audiveris_command(cls, value):  # type: ignore[override]
+    @field_validator("audiveris_command", mode="before")
+    def parse_audiveris_command(cls, value):
         """Permite indicar el comando de Audiveris como cadena única."""
         if value in (None, ""):
             return None
@@ -48,8 +49,8 @@ class Settings(BaseSettings):
             return shlex.split(value)
         return value
 
-    @validator("results_dir", pre=True)
-    def ensure_results_dir(cls, value):  # type: ignore[override]
+    @field_validator("results_dir", mode="before")
+    def ensure_results_dir(cls, value):
         """Convierte la ruta de resultados a ``Path``."""
         if isinstance(value, Path):
             return value
