@@ -37,6 +37,6 @@
 - [x] Organizar módulos y añadir documentación en el backend.
 
 ## Extensiones futuras (opcionales)
-- [ ] Soporte para PDFs multipágina.
+- [x] Soporte para PDFs multipágina.
 - [x] Historial de conversiones por sesión.
 - [ ] Previsualización del MusicXML en el navegador.

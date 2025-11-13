@@ -3,7 +3,7 @@
 from pathlib import Path
 import tempfile
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 
 from app.core import settings
@@ -19,7 +19,10 @@ MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 
 
 @router.post("/omr", summary="Procesa una partitura y devuelve la URL del MusicXML")
-async def process_score(file: UploadFile = File(...)) -> dict[str, object]:
+async def process_score(
+    file: UploadFile = File(...),
+    page: int | None = Form(default=None),
+) -> dict[str, object]:
     """Recibe un archivo del frontend, ejecuta OMR y genera un enlace de descarga."""
 
     if file.filename is None or not file.filename.strip():
@@ -48,13 +51,19 @@ async def process_score(file: UploadFile = File(...)) -> dict[str, object]:
             detail="El archivo supera el tamaño máximo permitido de 10 MB.",
         )
 
+    if page is not None and page < 1:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="El número de página debe ser mayor o igual a 1.",
+        )
+
     suffix = extension or ".tmp"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
         tmp_file.write(file_bytes)
         temp_path = Path(tmp_file.name)
 
     try:
-        result = run_omr(temp_path)
+        result = run_omr(temp_path, page=page)
     except OMRProcessingError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -71,6 +80,8 @@ async def process_score(file: UploadFile = File(...)) -> dict[str, object]:
         "musicxml_url": musicxml_url,
         "result_id": result.result_id,
         "original_filename": file.filename,
+        "page_number": result.page_number,
+        "total_pages": result.total_pages,
     }
 
 

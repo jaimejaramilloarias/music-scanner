@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Conversor OMR a MusicXML</title>
     <link rel="stylesheet" href="style.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.js" defer></script>
     <script src="config.js" defer></script>
     <script src="app.js" defer></script>
   </head>
@@ -18,6 +19,13 @@
       <section class="upload-section">
         <label for="scoreFile" class="upload-label">Selecciona una imagen:</label>
         <input id="scoreFile" type="file" accept=".png,.jpg,.jpeg,.pdf" />
+        <div id="pdfOptions" class="pdf-options hidden">
+          <label for="pageNumber" class="pdf-options-label">Selecciona la página a procesar:</label>
+          <div class="pdf-options-controls">
+            <input id="pageNumber" type="number" min="1" value="1" />
+            <span id="pageDetails" class="pdf-page-details">Procesará la página 1.</span>
+          </div>
+        </div>
         <button id="processButton" type="button">Procesar partitura</button>
       </section>
 
