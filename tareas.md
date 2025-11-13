@@ -38,5 +38,5 @@
 
 ## Extensiones futuras (opcionales)
 - [ ] Soporte para PDFs multipágina.
-- [ ] Historial de conversiones por sesión.
+- [x] Historial de conversiones por sesión.
 - [ ] Previsualización del MusicXML en el navegador.
