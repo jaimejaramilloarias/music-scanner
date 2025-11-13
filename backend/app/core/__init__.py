@@ -1,1 +1,5 @@
-"""Módulos de configuración y utilidades generales del backend."""
+"""Componentes centrales del backend."""
+
+from .config import settings
+
+__all__ = ["settings"]
