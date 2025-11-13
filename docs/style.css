@@ -1,0 +1,92 @@
+:root {
+  color-scheme: light dark;
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  background-color: #f4f6fb;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: #1b1b1f;
+  background: linear-gradient(180deg, #f4f6fb 0%, #ffffff 60%);
+}
+
+.app-header,
+.app-footer {
+  padding: 1.5rem;
+  text-align: center;
+  background-color: rgba(27, 27, 31, 0.05);
+}
+
+.app-main {
+  flex: 1;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+  display: grid;
+  gap: 2rem;
+}
+
+.upload-section,
+.status-section,
+.results-section {
+  padding: 1.5rem;
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 12px 28px rgba(15, 18, 24, 0.1);
+}
+
+.upload-label {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+}
+
+#scoreFile {
+  display: block;
+  margin-bottom: 1rem;
+}
+
+#processButton {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-color: #2c3e50;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+#processButton:hover {
+  background-color: #1b2838;
+}
+
+.status-message {
+  margin: 0;
+}
+
+.status-message.error {
+  color: #9b1c1c;
+}
+
+.status-message.success {
+  color: #1c7b2c;
+}
+
+.results-container {
+  min-height: 3rem;
+}
+
+.placeholder {
+  color: rgba(27, 27, 31, 0.7);
+}
+
+code {
+  font-family: 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+}
