@@ -27,6 +27,29 @@
             <span id="pageDetails" class="pdf-page-details">Procesará la página 1.</span>
           </div>
         </div>
+        <details class="advanced-options">
+          <summary>Opciones avanzadas</summary>
+          <div class="advanced-options-group">
+            <label for="processingMode" class="advanced-options-label">Modo de reconocimiento:</label>
+            <select id="processingMode" class="advanced-options-select">
+              <option value="auto">Automático</option>
+              <option value="printed">Impreso</option>
+              <option value="handwritten">Manuscrito</option>
+            </select>
+          </div>
+          <div class="advanced-options-group">
+            <label for="advancedParams" class="advanced-options-label">Parámetros adicionales para Audiveris:</label>
+            <input
+              id="advancedParams"
+              type="text"
+              class="advanced-options-input"
+              placeholder="Ejemplo: --engine printed"
+            />
+            <p class="advanced-options-help">
+              Se añadirán al comando utilizado para lanzar Audiveris. Ajusta los valores con cuidado.
+            </p>
+          </div>
+        </details>
         <button id="processButton" type="button">Procesar partitura</button>
       </section>
 

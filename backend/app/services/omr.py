@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import logging
+import shlex
 import shutil
 import subprocess
 import tempfile
 import textwrap
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
@@ -29,17 +30,26 @@ class OMRResult:
 
     result_id: str
     musicxml_path: Path
+    processing_mode: str
     page_number: int | None = None
     total_pages: int | None = None
+    applied_arguments: tuple[str, ...] = field(default_factory=tuple)
 
 
-def run_omr(input_path: Path, *, page: int | None = None) -> OMRResult:
+def run_omr(
+    input_path: Path,
+    *,
+    page: int | None = None,
+    processing_mode: str | None = None,
+    extra_cli_arguments: Iterable[str] | str | None = None,
+) -> OMRResult:
     """Ejecuta el flujo de OMR y devuelve un resultado listo para descargar.
 
     El procesamiento intentará utilizar Audiveris si se ha configurado un comando
     válido. En caso contrario, o si se produce un error y ``enable_stub_omr`` es
     ``True``, se generará un archivo MusicXML ficticio para mantener operativo el
-    flujo de extremo a extremo.
+    flujo de extremo a extremo. Además, permite ajustar el modo de procesamiento
+    y añadir argumentos adicionales a la ejecución.
     """
 
     if not input_path.exists():
@@ -47,12 +57,26 @@ def run_omr(input_path: Path, *, page: int | None = None) -> OMRResult:
             f"El archivo de entrada '{input_path}' no existe o fue eliminado antes de ejecutar OMR."
         )
 
+    selected_mode = (processing_mode or settings.default_processing_mode).strip().lower()
+    available_modes = settings.audiveris_processing_presets
+    if selected_mode not in available_modes:
+        raise OMRProcessingError(
+            f"El modo de procesamiento '{selected_mode}' no está configurado en el backend."
+        )
+
+    preset_arguments = _normalize_cli_arguments(available_modes.get(selected_mode))
+    user_arguments = _normalize_cli_arguments(extra_cli_arguments)
+    effective_arguments = [*preset_arguments, *user_arguments]
+
     prepared_path, page_number, total_pages = _prepare_input_for_omr(input_path, page)
     source_name = input_path.name
 
     try:
         if settings.audiveris_command:
-            musicxml_path = _run_with_audiveris(prepared_path)
+            musicxml_path = _run_with_audiveris(
+                prepared_path,
+                extra_arguments=effective_arguments,
+            )
         else:
             raise OMRProcessingError(
                 "No se configuró el comando de Audiveris. Se utilizará un resultado ficticio."
@@ -61,7 +85,12 @@ def run_omr(input_path: Path, *, page: int | None = None) -> OMRResult:
         if not settings.enable_stub_omr:
             raise
         logger.warning("Fallo al ejecutar Audiveris: %s", exc)
-        musicxml_path = _generate_stub_result(source_name, page_number=page_number)
+        musicxml_path = _generate_stub_result(
+            source_name,
+            page_number=page_number,
+            processing_mode=selected_mode,
+            cli_arguments=effective_arguments,
+        )
     finally:
         if prepared_path is not input_path:
             prepared_path.unlink(missing_ok=True)
@@ -70,8 +99,10 @@ def run_omr(input_path: Path, *, page: int | None = None) -> OMRResult:
     return OMRResult(
         result_id=result_id,
         musicxml_path=stored_path,
+        processing_mode=selected_mode,
         page_number=page_number,
         total_pages=total_pages,
+        applied_arguments=tuple(effective_arguments),
     )
 
 
@@ -101,7 +132,11 @@ def _prepare_input_for_omr(
     return _extract_pdf_page(input_path, page)
 
 
-def _run_with_audiveris(input_path: Path) -> Path:
+def _run_with_audiveris(
+    input_path: Path,
+    *,
+    extra_arguments: Iterable[str] | None = None,
+) -> Path:
     """Invoca Audiveris mediante CLI y devuelve la ruta temporal del MusicXML."""
 
     output_dir = Path(tempfile.mkdtemp(prefix="omr_audiveris_"))
@@ -109,10 +144,16 @@ def _run_with_audiveris(input_path: Path) -> Path:
         *settings.audiveris_command,
         "-batch",
         "-export",
+    ]
+
+    if extra_arguments:
+        command.extend(str(argument).strip() for argument in extra_arguments if str(argument).strip())
+
+    command.extend([
         "-output",
         str(output_dir),
         str(input_path),
-    ]
+    ])
 
     logger.info("Ejecutando Audiveris: %s", " ".join(command))
 
@@ -181,18 +222,31 @@ def _generate_stub_result(
     source_name: str,
     *,
     page_number: int | None = None,
+    processing_mode: str | None = None,
+    cli_arguments: Iterable[str] | None = None,
 ) -> Path:
     """Genera un archivo MusicXML mínimo para mantener el flujo funcional."""
 
-    encoding_block = ""
+    normalized_arguments = _normalize_cli_arguments(cli_arguments)
+    arguments_text = " ".join(normalized_arguments)
+
+    encoding_lines = []
+    if processing_mode:
+        encoding_lines.append(
+            f"        <software>Modo de reconocimiento: {processing_mode}</software>"
+        )
     if page_number:
-        encoding_block = textwrap.dedent(
-            f"""
-              <encoding>
-                <software>Página solicitada: {page_number}</software>
-              </encoding>
-            """
-        ).strip()
+        encoding_lines.append(
+            f"        <software>Página solicitada: {page_number}</software>"
+        )
+    if arguments_text:
+        encoding_lines.append(
+            f"        <software>Parámetros adicionales: {arguments_text}</software>"
+        )
+
+    encoding_block = ""
+    if encoding_lines:
+        encoding_block = "\n".join(["      <encoding>", *encoding_lines, "      </encoding>"])
 
     stub_content = textwrap.dedent(
         f"""
@@ -278,4 +332,21 @@ def _is_safe_identifier(value: str) -> bool:
 
     allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
     return all(char in allowed for char in value)
+
+
+def _normalize_cli_arguments(arguments: Iterable[str] | str | None) -> list[str]:
+    """Convierte un conjunto de argumentos en una lista segura de cadenas."""
+
+    if arguments is None:
+        return []
+
+    if isinstance(arguments, str):
+        return [argument for argument in shlex.split(arguments) if argument]
+
+    normalized: list[str] = []
+    for argument in arguments:
+        text = str(argument).strip()
+        if text:
+            normalized.append(text)
+    return normalized
 

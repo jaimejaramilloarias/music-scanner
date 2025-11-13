@@ -1,11 +1,12 @@
 """Configuración de la aplicación y utilidades relacionadas."""
 
 from functools import lru_cache
+import json
 import shlex
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import AnyHttpUrl, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +28,12 @@ class Settings(BaseSettings):
     audiveris_command: Optional[List[str]] = None
     audiveris_timeout: int = 300
     enable_stub_omr: bool = True
+    default_processing_mode: str = "auto"
+    audiveris_processing_presets: Dict[str, List[str]] = {
+        "auto": [],
+        "printed": [],
+        "handwritten": [],
+    }
 
     model_config = SettingsConfigDict(
         env_prefix="omr_",
@@ -55,6 +62,78 @@ class Settings(BaseSettings):
         if isinstance(value, Path):
             return value
         return Path(str(value)).expanduser()
+
+    @field_validator("default_processing_mode", mode="before")
+    def normalize_default_mode(cls, value):
+        """Normaliza el modo por defecto a minúsculas."""
+        if value in (None, ""):
+            return "auto"
+        return str(value).strip().lower()
+
+    @field_validator("audiveris_processing_presets", mode="before")
+    def parse_processing_presets(cls, value):
+        """Permite definir los presets como JSON o diccionario."""
+        if value in (None, "", {}):
+            return {
+                "auto": [],
+                "printed": [],
+                "handwritten": [],
+            }
+
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError as exc:  # pragma: no cover - configuración inválida
+                raise ValueError(
+                    "OMR_AUDIVERIS_PROCESSING_PRESETS debe ser un objeto JSON válido.",
+                ) from exc
+        elif isinstance(value, dict):
+            parsed = value
+        else:  # pragma: no cover - tipos no contemplados
+            raise TypeError(
+                "Los presets de procesamiento deben indicarse como JSON o diccionario.",
+            )
+
+        sanitized: Dict[str, List[str]] = {}
+        for raw_key, raw_args in parsed.items():
+            key = str(raw_key).strip().lower()
+            if not key:
+                continue
+
+            if isinstance(raw_args, str):
+                args_list = [arg for arg in shlex.split(raw_args) if arg]
+            elif isinstance(raw_args, (list, tuple, set)):
+                args_list = [str(arg).strip() for arg in raw_args if str(arg).strip()]
+            else:  # pragma: no cover - tipos no contemplados
+                raise ValueError(
+                    "Cada preset debe ser una cadena o una lista de argumentos.",
+                )
+
+            sanitized[key] = args_list
+
+        if "auto" not in sanitized:
+            sanitized["auto"] = []
+
+        return sanitized
+
+    @model_validator(mode="after")
+    def ensure_default_mode_in_presets(self):
+        """Garantiza que el modo por defecto exista entre los presets configurados."""
+
+        if self.default_processing_mode not in self.audiveris_processing_presets:
+            available = ", ".join(sorted(self.audiveris_processing_presets))
+            raise ValueError(
+                "El modo por defecto configurado no existe en los presets disponibles. "
+                f"Modos configurados: {available or 'ninguno'}.",
+            )
+
+        return self
+
+    @property
+    def available_processing_modes(self) -> List[str]:
+        """Devuelve la lista de modos de procesamiento configurados."""
+
+        return list(self.audiveris_processing_presets.keys())
 
 
 @lru_cache()

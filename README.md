@@ -33,11 +33,15 @@ Este repositorio contiene una aplicación sencilla que permite convertir imágen
    OMR_PUBLIC_BASE_URL=https://tu-backend.example.com
    OMR_AUDIVERIS_COMMAND="/ruta/a/audiveris -batch"
    OMR_ENABLE_STUB_OMR=true
+   OMR_DEFAULT_PROCESSING_MODE=auto
+   OMR_AUDIVERIS_PROCESSING_PRESETS={"auto": [], "printed": ["--engine", "printed"], "handwritten": ["--engine", "handwritten"]}
    ```
    - `OMR_ALLOWED_ORIGINS`: lista separada por comas con los orígenes autorizados para CORS.
    - `OMR_PUBLIC_BASE_URL`: URL pública del backend (se usa para construir los enlaces de descarga).
    - `OMR_AUDIVERIS_COMMAND`: comando completo para ejecutar Audiveris. Si no se indica y `OMR_ENABLE_STUB_OMR=true`, se generará un MusicXML de prueba.
    - `OMR_ENABLE_STUB_OMR`: permite habilitar un resultado ficticio cuando Audiveris no está disponible.
+   - `OMR_DEFAULT_PROCESSING_MODE`: modo de procesamiento que se aplicará por defecto al recibir peticiones.
+   - `OMR_AUDIVERIS_PROCESSING_PRESETS`: diccionario (JSON) que define los argumentos adicionales para cada modo disponible. Si dejas las listas vacías, el comando base no añadirá parámetros extra.
 
 4. Ejecutar el backend en desarrollo:
    ```bash
@@ -52,6 +56,7 @@ Este repositorio contiene una aplicación sencilla que permite convertir imágen
 ## Configuración del frontend
 
 1. Editar `docs/config.js` y actualizar `OMR_API_BASE_URL` con la URL real del backend.
+   - En el mismo archivo puedes ajustar `OMR_PROCESSING_MODES` para que la lista de modos disponibles coincida con los configurados en el servidor.
 2. Publicar la carpeta `docs/` mediante GitHub Pages (ramas principales -> carpeta `/docs`).
 3. Abrir la página en el navegador, seleccionar una partitura y pulsar **Procesar partitura**.
 
@@ -68,6 +73,12 @@ El frontend valida el tipo y tamaño del archivo antes de enviarlo, muestra esta
 - Tras cada conversión exitosa, la interfaz descarga el MusicXML generado y lo renderiza como partitura usando la librería [Verovio](https://www.verovio.org/).
 - El visor incrustado indica la página que se está mostrando y referencia el archivo original cuando se dispone del nombre.
 - Si el previsualizador no puede inicializarse, la aplicación mantiene el enlace de descarga para que el usuario abra el MusicXML en su editor preferido.
+
+### Modos de procesamiento avanzados
+
+- El formulario incluye un apartado de **Opciones avanzadas** para escoger entre los modos configurados (`Automático`, `Impreso`, `Manuscrito`).
+- También permite especificar argumentos adicionales que se añadirán al comando de Audiveris, útil para activar perfiles personalizados o ajustar parámetros finos.
+- El backend valida que el modo solicitado esté habilitado en `OMR_AUDIVERIS_PROCESSING_PRESETS` y refleja tanto el modo como los argumentos aplicados en el archivo MusicXML resultante.
 
 ## Flujo completo de uso
 

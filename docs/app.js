@@ -9,6 +9,8 @@
   const pdfOptions = document.getElementById('pdfOptions');
   const pageInput = document.getElementById('pageNumber');
   const pageDetails = document.getElementById('pageDetails');
+  const processingModeSelect = document.getElementById('processingMode');
+  const advancedParamsInput = document.getElementById('advancedParams');
   const conversions = [];
   const historyDateFormatter = new Intl.DateTimeFormat('es-ES', {
     dateStyle: 'short',
@@ -26,6 +28,94 @@
 
   const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
   const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'pdf'];
+  const FALLBACK_PROCESSING_MODES = [
+    { value: 'auto', label: 'Automático' },
+    { value: 'printed', label: 'Impreso' },
+    { value: 'handwritten', label: 'Manuscrito' },
+  ];
+
+  function sanitizeProcessingModes(rawModes) {
+    if (!Array.isArray(rawModes)) {
+      return [];
+    }
+
+    return rawModes
+      .map((mode) => {
+        if (!mode || typeof mode !== 'object') {
+          return null;
+        }
+
+        const value = String(mode.value ?? '').trim();
+        if (!value) {
+          return null;
+        }
+
+        const label = String(mode.label ?? '').trim() || value;
+        return { value: value.toLowerCase(), label };
+      })
+      .filter(Boolean);
+  }
+
+  const configuredProcessingModes = sanitizeProcessingModes(window.OMR_PROCESSING_MODES);
+  const processingModes = configuredProcessingModes.length
+    ? configuredProcessingModes
+    : FALLBACK_PROCESSING_MODES;
+  const processingModeMap = new Map(
+    processingModes.map((mode) => [mode.value.toLowerCase(), mode.label]),
+  );
+  const defaultProcessingMode =
+    (processingModeMap.has('auto') && 'auto') || processingModes[0]?.value || 'auto';
+
+  function describeProcessingMode(mode) {
+    if (!mode) {
+      return '';
+    }
+
+    const normalized = String(mode).toLowerCase();
+    return processingModeMap.get(normalized) || mode;
+  }
+
+  function populateProcessingModeOptions() {
+    if (!processingModeSelect) {
+      return;
+    }
+
+    processingModeSelect.innerHTML = '';
+    processingModes.forEach((mode) => {
+      const option = document.createElement('option');
+      option.value = mode.value;
+      option.textContent = mode.label;
+      processingModeSelect.appendChild(option);
+    });
+
+    if (processingModeMap.has(defaultProcessingMode)) {
+      processingModeSelect.value = defaultProcessingMode;
+    } else if (processingModes.length > 0) {
+      processingModeSelect.value = processingModes[0].value;
+    }
+  }
+
+  function sanitizeCliArguments(argumentsArray) {
+    if (Array.isArray(argumentsArray)) {
+      return argumentsArray
+        .map((arg) => String(arg ?? '').trim())
+        .filter((arg) => arg.length > 0);
+    }
+
+    if (typeof argumentsArray === 'string') {
+      return argumentsArray
+        .split(/\s+/)
+        .map((arg) => arg.trim())
+        .filter((arg) => arg.length > 0);
+    }
+
+    return [];
+  }
+
+  function formatCliArguments(argumentsArray) {
+    const sanitized = sanitizeCliArguments(argumentsArray);
+    return sanitized.join(' ');
+  }
 
   function setStatus(message, type = 'info') {
     statusElement.textContent = message;
@@ -125,7 +215,15 @@
     return `Página ${pageNumber}`;
   }
 
-  function renderLatestResult(url, originalFilename, resultId, pageNumber, totalPages) {
+  function renderLatestResult(
+    url,
+    originalFilename,
+    resultId,
+    pageNumber,
+    totalPages,
+    processingMode,
+    appliedArguments,
+  ) {
     const wrapper = document.createElement('div');
     wrapper.className = 'download-result';
 
@@ -143,22 +241,36 @@
     link.rel = 'noopener';
 
     const pageInfo = describePage(pageNumber, totalPages);
-    let pageParagraph = null;
-    if (pageInfo) {
-      pageParagraph = document.createElement('p');
-      pageParagraph.className = 'download-page-info';
-      pageParagraph.textContent = pageInfo;
-    }
-
     const identifier = document.createElement('p');
     identifier.className = 'download-id';
     identifier.textContent = resultId ? `ID de referencia: ${resultId}` : '';
 
     wrapper.appendChild(info);
     wrapper.appendChild(link);
-    if (pageParagraph) {
+
+    if (pageInfo) {
+      const pageParagraph = document.createElement('p');
+      pageParagraph.className = 'download-page-info';
+      pageParagraph.textContent = pageInfo;
       wrapper.appendChild(pageParagraph);
     }
+
+    const modeLabel = describeProcessingMode(processingMode);
+    if (modeLabel) {
+      const modeParagraph = document.createElement('p');
+      modeParagraph.className = 'download-processing-mode';
+      modeParagraph.textContent = `Modo de reconocimiento: ${modeLabel}.`;
+      wrapper.appendChild(modeParagraph);
+    }
+
+    const cliArgumentsText = formatCliArguments(appliedArguments);
+    if (cliArgumentsText) {
+      const extraParagraph = document.createElement('p');
+      extraParagraph.className = 'download-extra-options';
+      extraParagraph.textContent = `Parámetros adicionales: ${cliArgumentsText}`;
+      wrapper.appendChild(extraParagraph);
+    }
+
     if (resultId) {
       wrapper.appendChild(identifier);
     }
@@ -216,6 +328,10 @@
       if (pageInfo) {
         metadataParts.push(pageInfo);
       }
+      const modeLabel = describeProcessingMode(conversion.processingMode);
+      if (modeLabel) {
+        metadataParts.push(`Modo: ${modeLabel}`);
+      }
       metadataParts.push(timestamp);
       metadata.textContent = metadataParts.join(' · ');
 
@@ -223,6 +339,13 @@
 
       item.appendChild(title);
       item.appendChild(metadata);
+      const cliArgumentsText = formatCliArguments(conversion.appliedArguments);
+      if (cliArgumentsText) {
+        const advanced = document.createElement('p');
+        advanced.className = 'history-advanced';
+        advanced.textContent = `Parámetros adicionales: ${cliArgumentsText}`;
+        item.appendChild(advanced);
+      }
       item.appendChild(actions);
 
       list.appendChild(item);
@@ -238,6 +361,8 @@
       resultId: payload.result_id || '',
       pageNumber: payload.page_number ?? null,
       totalPages: payload.total_pages ?? null,
+      processingMode: payload.processing_mode || defaultProcessingMode,
+      appliedArguments: sanitizeCliArguments(payload.applied_cli_arguments),
       completedAt: new Date(),
     };
 
@@ -248,6 +373,8 @@
       conversion.resultId,
       conversion.pageNumber,
       conversion.totalPages,
+      conversion.processingMode,
+      conversion.appliedArguments,
     );
     renderHistory();
     void renderPreview(conversion);
@@ -302,6 +429,10 @@
       }
       if (conversion.originalFilename) {
         messageParts.push(`Archivo: “${conversion.originalFilename}”.`);
+      }
+      const modeLabel = describeProcessingMode(conversion.processingMode);
+      if (modeLabel) {
+        messageParts.push(`Modo: ${modeLabel}.`);
       }
 
       setPreviewStatus(messageParts.join(' '), 'success');
@@ -458,6 +589,14 @@
   async function sendFile(file, pageNumber) {
     const formData = new FormData();
     formData.append('file', file);
+    const selectedMode = (processingModeSelect?.value || defaultProcessingMode).trim();
+    if (selectedMode) {
+      formData.append('processing_mode', selectedMode);
+    }
+    const advancedOptions = advancedParamsInput?.value.trim();
+    if (advancedOptions) {
+      formData.append('advanced_options', advancedOptions);
+    }
     if (typeof pageNumber === 'number' && Number.isFinite(pageNumber)) {
       formData.append('page', String(pageNumber));
     }
@@ -559,6 +698,8 @@
     setStatus('Preparando archivo para enviar…');
     void sendFile(file, pageNumberToSend);
   }
+
+  populateProcessingModeOptions();
 
   fileInput?.addEventListener('change', () => {
     void handleFileChange();
