@@ -4,6 +4,8 @@
   const statusElement = document.getElementById('status');
   const resultsContainer = document.getElementById('results');
   const historyContainer = document.getElementById('history');
+  const previewStatusElement = document.getElementById('previewStatus');
+  const previewContentElement = document.getElementById('previewContent');
   const pdfOptions = document.getElementById('pdfOptions');
   const pageInput = document.getElementById('pageNumber');
   const pageDetails = document.getElementById('pageDetails');
@@ -13,6 +15,9 @@
     timeStyle: 'medium',
   });
   let currentPdfPageCount = null;
+  let verovioToolkitInstance = null;
+  let verovioToolkitError = false;
+  let verovioToolkitPromise = null;
 
   if (window.pdfjsLib?.GlobalWorkerOptions) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -30,6 +35,82 @@
 
   function resetResults() {
     resultsContainer.innerHTML = '<p class="placeholder">Aquí aparecerá el enlace para descargar el MusicXML.</p>';
+  }
+
+  function setPreviewStatus(message, type = 'info') {
+    if (!previewStatusElement) {
+      return;
+    }
+
+    previewStatusElement.textContent = message;
+    previewStatusElement.classList.remove('info', 'error', 'success');
+    previewStatusElement.classList.add(type);
+  }
+
+  function showPreviewPlaceholder(text) {
+    if (!previewContentElement) {
+      return;
+    }
+
+    previewContentElement.innerHTML = `<p class="placeholder">${text}</p>`;
+  }
+
+  function resetPreview() {
+    if (!previewContentElement || !previewStatusElement) {
+      return;
+    }
+
+    setPreviewStatus(
+      'La previsualización aparecerá aquí cuando haya un resultado disponible.',
+      'info',
+    );
+    showPreviewPlaceholder('Todavía no hay ninguna previsualización disponible.');
+  }
+
+  function preparePreviewForProcessing() {
+    if (!previewContentElement || !previewStatusElement) {
+      return;
+    }
+
+    setPreviewStatus('La previsualización se actualizará cuando finalice la conversión.', 'info');
+    showPreviewPlaceholder('Generando previsualización…');
+  }
+
+  async function ensureVerovioToolkit() {
+    if (verovioToolkitInstance) {
+      return verovioToolkitInstance;
+    }
+
+    if (verovioToolkitError) {
+      return null;
+    }
+
+    if (verovioToolkitPromise) {
+      return verovioToolkitPromise;
+    }
+
+    if (!window.verovio || typeof window.verovio.toolkit !== 'function') {
+      console.warn('La librería Verovio no está disponible en la página.');
+      verovioToolkitError = true;
+      return null;
+    }
+
+    verovioToolkitPromise = Promise.resolve()
+      .then(() => new window.verovio.toolkit())
+      .then((toolkit) => {
+        verovioToolkitInstance = toolkit;
+        return toolkit;
+      })
+      .catch((error) => {
+        console.error('No se pudo inicializar el visor Verovio.', error);
+        verovioToolkitError = true;
+        return null;
+      })
+      .finally(() => {
+        verovioToolkitPromise = null;
+      });
+
+    return verovioToolkitPromise;
   }
 
   function describePage(pageNumber, totalPages) {
@@ -169,6 +250,69 @@
       conversion.totalPages,
     );
     renderHistory();
+    void renderPreview(conversion);
+  }
+
+  async function renderPreview(conversion) {
+    if (!conversion || !previewContentElement || !previewStatusElement) {
+      return;
+    }
+
+    setPreviewStatus('Generando previsualización del MusicXML…', 'info');
+    showPreviewPlaceholder('Cargando MusicXML para mostrar la partitura.');
+
+    const toolkit = await ensureVerovioToolkit();
+    if (!toolkit) {
+      setPreviewStatus(
+        'El visor integrado no está disponible en este navegador. Descarga el MusicXML para revisarlo manualmente.',
+        'error',
+      );
+      showPreviewPlaceholder('Descarga el MusicXML para revisarlo en tu editor preferido.');
+      return;
+    }
+
+    try {
+      const response = await fetch(conversion.url, { cache: 'no-store' });
+      if (!response.ok) {
+        throw new Error(`No se pudo cargar el MusicXML (código ${response.status}).`);
+      }
+
+      const musicXml = await response.text();
+
+      toolkit.setOptions({
+        adjustPageHeight: true,
+        svgViewBox: true,
+        footer: 'none',
+        header: 'none',
+        scale: 35,
+        pageWidth: 2100,
+        pageHeight: 2970,
+        ignoreLayout: 1,
+      });
+
+      toolkit.loadData(musicXml, {});
+      const totalPages = toolkit.getPageCount();
+      const svg = toolkit.renderToSVG(1, {});
+
+      previewContentElement.innerHTML = svg;
+
+      const messageParts = ['Previsualización generada correctamente.'];
+      if (Number.isInteger(totalPages) && totalPages > 1) {
+        messageParts.push(`Mostrando la página 1 de ${totalPages}.`);
+      }
+      if (conversion.originalFilename) {
+        messageParts.push(`Archivo: “${conversion.originalFilename}”.`);
+      }
+
+      setPreviewStatus(messageParts.join(' '), 'success');
+    } catch (error) {
+      console.error('No se pudo renderizar la previsualización.', error);
+      setPreviewStatus(
+        'No se pudo generar la previsualización. Descarga el MusicXML para revisarlo manualmente.',
+        'error',
+      );
+      showPreviewPlaceholder('Descarga el MusicXML para revisarlo en tu editor preferido.');
+    }
   }
 
   function showPdfOptions() {
@@ -320,6 +464,7 @@
 
     setStatus('Enviando archivo al backend…');
     resetResults();
+    preparePreviewForProcessing();
 
     try {
       const response = await fetch(`${OMR_API_BASE_URL}/api/omr`, {
@@ -363,6 +508,8 @@
       console.error(error);
       setStatus(error.message || 'Error inesperado al contactar con el backend.', 'error');
       resetResults();
+      setPreviewStatus('No se pudo generar la previsualización para esta conversión.', 'error');
+      showPreviewPlaceholder('Descarga el MusicXML para revisarlo manualmente.');
     }
   }
 
@@ -419,4 +566,6 @@
 
   pageInput?.addEventListener('input', handlePageInputChange);
   processButton?.addEventListener('click', handleProcessClick);
+
+  resetPreview();
 })();

@@ -6,6 +6,7 @@
     <title>Conversor OMR a MusicXML</title>
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.js" defer></script>
+    <script src="https://www.verovio.org/javascript/latest/verovio-toolkit.js" defer></script>
     <script src="config.js" defer></script>
     <script src="app.js" defer></script>
   </head>
@@ -38,6 +39,16 @@
         <h2>Resultados</h2>
         <div id="results" class="results-container">
           <p class="placeholder">Aquí aparecerá el enlace para descargar el MusicXML.</p>
+        </div>
+      </section>
+
+      <section class="preview-section">
+        <h2>Previsualización del MusicXML</h2>
+        <p id="previewStatus" class="preview-status status-message info">
+          La previsualización aparecerá aquí cuando haya un resultado disponible.
+        </p>
+        <div id="previewContent" class="preview-content">
+          <p class="placeholder">Todavía no hay ninguna previsualización disponible.</p>
         </div>
       </section>
 

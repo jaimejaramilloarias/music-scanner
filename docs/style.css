@@ -34,6 +34,7 @@ body {
 .upload-section,
 .status-section,
 .results-section,
+.preview-section,
 .history-section {
   padding: 1.5rem;
   border-radius: 12px;
@@ -139,6 +140,26 @@ body {
 
 .history-container {
   min-height: 3rem;
+}
+
+.preview-content {
+  min-height: 12rem;
+  padding: 1rem;
+  border-radius: 8px;
+  background-color: rgba(27, 27, 31, 0.03);
+  border: 1px solid rgba(27, 27, 31, 0.1);
+  overflow-x: auto;
+}
+
+.preview-content svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.preview-status {
+  margin-bottom: 1rem;
 }
 
 .placeholder {

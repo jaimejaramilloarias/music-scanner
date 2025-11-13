@@ -63,6 +63,12 @@ El frontend valida el tipo y tamaño del archivo antes de enviarlo, muestra esta
 - El navegador intenta detectar automáticamente cuántas páginas tiene el documento (usando PDF.js). Si no puede determinarlo, seguirá permitiendo que se indique manualmente.
 - El backend valida el número de página recibido y, si el PDF contiene varias páginas, extrae únicamente la solicitada antes de invocar Audiveris.
 
+### Previsualización integrada del MusicXML
+
+- Tras cada conversión exitosa, la interfaz descarga el MusicXML generado y lo renderiza como partitura usando la librería [Verovio](https://www.verovio.org/).
+- El visor incrustado indica la página que se está mostrando y referencia el archivo original cuando se dispone del nombre.
+- Si el previsualizador no puede inicializarse, la aplicación mantiene el enlace de descarga para que el usuario abra el MusicXML en su editor preferido.
+
 ## Flujo completo de uso
 
 1. El usuario abre la página en GitHub Pages.
