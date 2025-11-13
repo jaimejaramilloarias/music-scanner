@@ -3,6 +3,12 @@
   const processButton = document.getElementById('processButton');
   const statusElement = document.getElementById('status');
   const resultsContainer = document.getElementById('results');
+  const historyContainer = document.getElementById('history');
+  const conversions = [];
+  const historyDateFormatter = new Intl.DateTimeFormat('es-ES', {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+  });
 
   const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
   const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'pdf'];
@@ -17,7 +23,7 @@
     resultsContainer.innerHTML = '<p class="placeholder">Aquí aparecerá el enlace para descargar el MusicXML.</p>';
   }
 
-  function renderDownloadResult(url, originalFilename, resultId) {
+  function renderLatestResult(url, originalFilename, resultId) {
     const wrapper = document.createElement('div');
     wrapper.className = 'download-result';
 
@@ -46,6 +52,76 @@
 
     resultsContainer.innerHTML = '';
     resultsContainer.appendChild(wrapper);
+  }
+
+  function renderHistory() {
+    if (!historyContainer) {
+      return;
+    }
+
+    historyContainer.innerHTML = '';
+
+    if (conversions.length === 0) {
+      historyContainer.innerHTML =
+        '<p class="placeholder">Todavía no has procesado ninguna partitura.</p>';
+      return;
+    }
+
+    const list = document.createElement('ol');
+    list.className = 'history-list';
+
+    const reversed = [...conversions].reverse();
+
+    reversed.forEach((conversion) => {
+      const item = document.createElement('li');
+      item.className = 'history-item';
+
+      const title = document.createElement('p');
+      title.className = 'history-title';
+      title.textContent = conversion.originalFilename
+        ? `“${conversion.originalFilename}”`
+        : 'Conversión sin nombre';
+
+      const actions = document.createElement('div');
+      actions.className = 'history-actions';
+
+      const link = document.createElement('a');
+      link.className = 'history-link';
+      link.href = conversion.url;
+      link.textContent = 'Descargar';
+      link.target = '_blank';
+      link.rel = 'noopener';
+
+      const metadata = document.createElement('p');
+      metadata.className = 'history-meta';
+      const timestamp = historyDateFormatter.format(conversion.completedAt);
+      metadata.textContent = conversion.resultId
+        ? `ID: ${conversion.resultId} · ${timestamp}`
+        : timestamp;
+
+      actions.appendChild(link);
+
+      item.appendChild(title);
+      item.appendChild(metadata);
+      item.appendChild(actions);
+
+      list.appendChild(item);
+    });
+
+    historyContainer.appendChild(list);
+  }
+
+  function registerConversion(payload) {
+    const conversion = {
+      url: payload.musicxml_url,
+      originalFilename: payload.original_filename || '',
+      resultId: payload.result_id || '',
+      completedAt: new Date(),
+    };
+
+    conversions.push(conversion);
+    renderLatestResult(conversion.url, conversion.originalFilename, conversion.resultId);
+    renderHistory();
   }
 
   function extractErrorMessage(payload, fallback = 'No se pudo procesar la partitura.') {
@@ -117,7 +193,7 @@
         throw new Error('La respuesta del backend no incluye el enlace de descarga.');
       }
 
-      renderDownloadResult(payload.musicxml_url, payload.original_filename, payload.result_id);
+      registerConversion(payload);
       setStatus('Conversión completada. Descarga disponible.', 'success');
     } catch (error) {
       console.error(error);
