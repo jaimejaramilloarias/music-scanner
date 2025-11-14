@@ -55,11 +55,11 @@ Este repositorio contiene una aplicación sencilla que permite convertir imágen
 
 ## Configuración del frontend
 
-1. Editar `docs/config.js` y actualizar `window.OMR_CONFIG.apiBaseUrl` con la URL real del backend.
-   - En el mismo archivo puedes ajustar `window.OMR_CONFIG.processingModes` para que la lista de modos disponibles coincida con los configurados en el servidor.
-2. Publicar la carpeta `docs/` mediante GitHub Pages (ramas principales -> carpeta `/docs`).
-3. Abrir la página en el navegador, seleccionar una partitura y pulsar **Procesar partitura**.
+1. Publicar la carpeta `docs/` mediante GitHub Pages (ramas principales -> carpeta `/docs`).
+2. Al abrir la página pública, el frontend detecta automáticamente si se ejecuta en GitHub Pages y utiliza el backend desplegado en `https://music-scanner-backend.fly.dev`, por lo que funciona directamente sin cambios manuales.
+3. Si quieres desarrollar en local, el frontend cambia automáticamente la URL al abrirse desde `http://localhost` y utilizará `http://localhost:8000`.
 4. Desde la propia página puedes modificar la URL del backend en el bloque **Configuración del backend** y comprobar la conexión con el botón **Comprobar conexión**. La aplicación recuerda la última URL válida en el navegador y también acepta el parámetro `?backend=` en el enlace de GitHub Pages.
+5. En `docs/config.js` puedes personalizar `window.OMR_CONFIG.processingModes` para que la lista de modos disponibles coincida con los configurados en el servidor o, si despliegas tu propio backend público, actualizar `DEFAULT_PRODUCTION_BACKEND_URL` con la nueva dirección.
 
 El frontend valida el tipo y tamaño del archivo antes de enviarlo, muestra estados informativos durante el procesamiento y presenta mensajes de error normalizados si algo falla.
 
