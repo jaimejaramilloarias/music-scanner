@@ -53,6 +53,37 @@
         <button id="processButton" type="button">Procesar partitura</button>
       </section>
 
+      <section class="backend-config-section">
+        <h2>Configuración del backend</h2>
+        <p id="backendStatus" class="status-message info">
+          Configura la URL del backend antes de procesar partituras.
+        </p>
+        <div class="backend-config-controls">
+          <label for="backendUrl" class="backend-config-label">URL del backend:</label>
+          <input
+            id="backendUrl"
+            type="url"
+            class="backend-config-input"
+            placeholder="https://tu-backend.example.com"
+            autocomplete="url"
+            spellcheck="false"
+          />
+          <div class="backend-config-buttons">
+            <button id="applyBackendUrl" type="button">Aplicar URL</button>
+            <button id="checkBackendButton" type="button" class="secondary">
+              Comprobar conexión
+            </button>
+            <button id="resetBackendUrl" type="button" class="link-button">
+              Restablecer valores
+            </button>
+          </div>
+          <p class="backend-config-help">
+            También puedes indicar la URL mediante el parámetro <code>?backend=https://tu-backend</code>
+            en el enlace de GitHub Pages. La aplicación la recordará en este navegador.
+          </p>
+        </div>
+      </section>
+
       <section class="status-section">
         <h2>Estado</h2>
         <p id="status" class="status-message info">Sin operaciones en curso.</p>

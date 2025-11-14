@@ -40,3 +40,4 @@
 - [x] Soporte para PDFs multipágina.
 - [x] Historial de conversiones por sesión.
 - [x] Previsualización del MusicXML en el navegador.
+- [x] Configuración dinámica del backend desde la interfaz con verificación de salud.

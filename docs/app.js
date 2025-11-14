@@ -11,19 +11,287 @@
   const pageDetails = document.getElementById('pageDetails');
   const processingModeSelect = document.getElementById('processingMode');
   const advancedParamsInput = document.getElementById('advancedParams');
+  const backendUrlInput = document.getElementById('backendUrl');
+  const backendApplyButton = document.getElementById('applyBackendUrl');
+  const backendResetButton = document.getElementById('resetBackendUrl');
+  const backendCheckButton = document.getElementById('checkBackendButton');
+  const backendStatusElement = document.getElementById('backendStatus');
   const conversions = [];
   const historyDateFormatter = new Intl.DateTimeFormat('es-ES', {
     dateStyle: 'short',
     timeStyle: 'medium',
   });
+  const STORAGE_KEYS = {
+    backendUrl: 'omrBackendUrl',
+  };
+  const queryParameters = new URLSearchParams(window.location.search);
   let currentPdfPageCount = null;
   let verovioToolkitInstance = null;
   let verovioToolkitError = false;
   let verovioToolkitPromise = null;
+  let currentBackendUrl = null;
+  let backendReachable = false;
+  let backendHealthRequestId = 0;
 
   if (window.pdfjsLib?.GlobalWorkerOptions) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js';
+  }
+
+  function safeGetFromStorage(key) {
+    try {
+      return window.localStorage?.getItem(key) ?? null;
+    } catch (error) {
+      console.warn('No se pudo leer del almacenamiento local.', error);
+      return null;
+    }
+  }
+
+  function safeSetInStorage(key, value) {
+    try {
+      window.localStorage?.setItem(key, value);
+      return true;
+    } catch (error) {
+      console.warn('No se pudo guardar en el almacenamiento local.', error);
+      return false;
+    }
+  }
+
+  function safeRemoveFromStorage(key) {
+    try {
+      window.localStorage?.removeItem(key);
+    } catch (error) {
+      console.warn('No se pudo eliminar la clave del almacenamiento local.', error);
+    }
+  }
+
+  function normalizeBackendUrl(rawUrl) {
+    if (typeof rawUrl !== 'string') {
+      return null;
+    }
+
+    const trimmed = rawUrl.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    let candidate = trimmed;
+    if (!/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(candidate)) {
+      if (candidate.startsWith('//')) {
+        candidate = `https:${candidate}`;
+      } else if (!candidate.startsWith('/')) {
+        candidate = `https://${candidate}`;
+      }
+    }
+
+    try {
+      const parsed = new URL(candidate, window.location.origin);
+      parsed.hash = '';
+      parsed.search = '';
+      return parsed.toString().replace(/\/+$/, '');
+    } catch (error) {
+      console.warn('URL de backend no válida:', rawUrl, error);
+      return null;
+    }
+  }
+
+  function getBackendUrlFromConfig() {
+    const config = window.OMR_CONFIG ?? {};
+    if (typeof config.apiBaseUrl === 'string') {
+      return config.apiBaseUrl;
+    }
+    if (typeof config.defaultBackendUrl === 'string') {
+      return config.defaultBackendUrl;
+    }
+    if (typeof window.OMR_API_BASE_URL === 'string') {
+      return window.OMR_API_BASE_URL;
+    }
+    return null;
+  }
+
+  function getBackendUrlFromStorage() {
+    return safeGetFromStorage(STORAGE_KEYS.backendUrl);
+  }
+
+  function getBackendUrlFromQuery() {
+    const parameterNames = ['backend', 'apiBaseUrl', 'api_base_url'];
+    for (const name of parameterNames) {
+      const value = queryParameters.get(name);
+      if (value) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  function updateBackendStatus(message, type = 'info') {
+    if (!backendStatusElement) {
+      return;
+    }
+
+    backendStatusElement.textContent = message;
+    backendStatusElement.classList.remove('info', 'error', 'success');
+    backendStatusElement.classList.add(type);
+  }
+
+  function updateProcessButtonState() {
+    if (!processButton) {
+      return;
+    }
+
+    processButton.disabled = !currentBackendUrl;
+    processButton.title = currentBackendUrl
+      ? ''
+      : 'Configura la URL del backend antes de procesar partituras.';
+  }
+
+  function setBackendUrl(rawUrl, { persist = false, announce = true } = {}) {
+    const normalized = normalizeBackendUrl(rawUrl);
+    if (!normalized) {
+      if (announce) {
+        updateBackendStatus('La URL del backend no es válida. Revisa el formato e inténtalo de nuevo.', 'error');
+      }
+      return false;
+    }
+
+    currentBackendUrl = normalized;
+    if (persist) {
+      safeSetInStorage(STORAGE_KEYS.backendUrl, normalized);
+    }
+
+    if (backendUrlInput) {
+      backendUrlInput.value = normalized;
+    }
+
+    updateProcessButtonState();
+
+    if (announce) {
+      updateBackendStatus(`Backend configurado en ${normalized}.`, 'success');
+    }
+
+    return true;
+  }
+
+  async function checkBackendHealth() {
+    if (!currentBackendUrl) {
+      updateBackendStatus('Configura la URL del backend antes de comprobar la conexión.', 'error');
+      backendReachable = false;
+      return false;
+    }
+
+    const requestId = ++backendHealthRequestId;
+    updateBackendStatus('Comprobando la disponibilidad del backend…', 'info');
+
+    try {
+      const response = await fetch(`${currentBackendUrl}/api/health`, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch (error) {
+        // Ignoramos errores al interpretar JSON para mostrar un mensaje genérico.
+      }
+
+      if (requestId !== backendHealthRequestId) {
+        return backendReachable;
+      }
+
+      if (response.ok && payload && payload.status === 'ok') {
+        backendReachable = true;
+        updateBackendStatus(`Backend operativo (${currentBackendUrl}).`, 'success');
+        return true;
+      }
+
+      const detailMessage =
+        (payload && (payload.message || payload.detail)) ||
+        `Respuesta inesperada del backend (código ${response.status}).`;
+      throw new Error(detailMessage);
+    } catch (error) {
+      if (requestId !== backendHealthRequestId) {
+        return backendReachable;
+      }
+
+      backendReachable = false;
+      updateBackendStatus(
+        `No se pudo contactar con el backend: ${error.message || 'Error desconocido.'}`,
+        'error',
+      );
+      return false;
+    }
+  }
+
+  function initializeBackendConfiguration() {
+    const queryBackend = normalizeBackendUrl(getBackendUrlFromQuery());
+    const storedBackend = normalizeBackendUrl(getBackendUrlFromStorage());
+    const configuredBackend = normalizeBackendUrl(getBackendUrlFromConfig());
+    const fallbackBackend = normalizeBackendUrl(window.location.origin);
+
+    if (queryBackend && setBackendUrl(queryBackend, { persist: true, announce: false })) {
+      updateBackendStatus(
+        'URL del backend tomada de los parámetros del enlace. Verificando disponibilidad…',
+        'info',
+      );
+    } else if (storedBackend && setBackendUrl(storedBackend, { announce: false })) {
+      updateBackendStatus('Usando la última URL del backend guardada en este navegador.', 'info');
+    } else if (configuredBackend && setBackendUrl(configuredBackend, { announce: false })) {
+      updateBackendStatus('Usando la URL del backend definida en config.js.', 'info');
+    } else if (fallbackBackend && setBackendUrl(fallbackBackend, { announce: false })) {
+      updateBackendStatus('Usando el mismo origen de la página como backend.', 'info');
+    } else {
+      currentBackendUrl = null;
+      updateProcessButtonState();
+      updateBackendStatus('Configura la URL del backend antes de procesar partituras.', 'error');
+      return;
+    }
+
+    if (currentBackendUrl) {
+      void checkBackendHealth();
+    }
+  }
+
+  function handleApplyBackendUrl() {
+    if (!backendUrlInput) {
+      return;
+    }
+
+    const rawUrl = backendUrlInput.value;
+    if (!rawUrl || !rawUrl.trim()) {
+      updateBackendStatus('Introduce una URL antes de aplicar los cambios.', 'error');
+      return;
+    }
+
+    if (setBackendUrl(rawUrl, { persist: true })) {
+      void checkBackendHealth();
+    }
+  }
+
+  function handleResetBackendUrl() {
+    safeRemoveFromStorage(STORAGE_KEYS.backendUrl);
+
+    const configuredBackend = normalizeBackendUrl(getBackendUrlFromConfig());
+    const fallbackBackend = normalizeBackendUrl(window.location.origin);
+
+    if (configuredBackend && setBackendUrl(configuredBackend, { announce: false })) {
+      updateBackendStatus('Se restableció la URL definida en config.js.', 'info');
+      void checkBackendHealth();
+      return;
+    }
+
+    if (fallbackBackend && setBackendUrl(fallbackBackend, { announce: false })) {
+      updateBackendStatus('Se restableció la URL del mismo origen.', 'info');
+      void checkBackendHealth();
+      return;
+    }
+
+    currentBackendUrl = null;
+    updateProcessButtonState();
+    if (backendUrlInput) {
+      backendUrlInput.value = '';
+    }
+    updateBackendStatus('Configura la URL del backend antes de procesar partituras.', 'error');
   }
 
   const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -587,6 +855,13 @@
   }
 
   async function sendFile(file, pageNumber) {
+    if (!currentBackendUrl) {
+      setStatus('Configura la URL del backend antes de procesar partituras.', 'error');
+      updateBackendStatus('Configura la URL del backend antes de procesar partituras.', 'error');
+      resetResults();
+      return;
+    }
+
     const formData = new FormData();
     formData.append('file', file);
     const selectedMode = (processingModeSelect?.value || defaultProcessingMode).trim();
@@ -604,9 +879,10 @@
     setStatus('Enviando archivo al backend…');
     resetResults();
     preparePreviewForProcessing();
+    updateBackendStatus('Enviando archivo al backend…', 'info');
 
     try {
-      const response = await fetch(`${OMR_API_BASE_URL}/api/omr`, {
+      const response = await fetch(`${currentBackendUrl}/api/omr`, {
         method: 'POST',
         body: formData,
       });
@@ -643,9 +919,11 @@
 
       registerConversion(payload);
       setStatus('Conversión completada. Descarga disponible.', 'success');
+      updateBackendStatus('El backend respondió correctamente a la solicitud.', 'success');
     } catch (error) {
       console.error(error);
       setStatus(error.message || 'Error inesperado al contactar con el backend.', 'error');
+      updateBackendStatus(error.message || 'Error inesperado al contactar con el backend.', 'error');
       resetResults();
       setPreviewStatus('No se pudo generar la previsualización para esta conversión.', 'error');
       showPreviewPlaceholder('Descarga el MusicXML para revisarlo manualmente.');
@@ -700,6 +978,19 @@
   }
 
   populateProcessingModeOptions();
+  initializeBackendConfiguration();
+
+  backendApplyButton?.addEventListener('click', handleApplyBackendUrl);
+  backendResetButton?.addEventListener('click', handleResetBackendUrl);
+  backendCheckButton?.addEventListener('click', () => {
+    void checkBackendHealth();
+  });
+  backendUrlInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleApplyBackendUrl();
+    }
+  });
 
   fileInput?.addEventListener('change', () => {
     void handleFileChange();
