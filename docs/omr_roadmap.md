@@ -3,14 +3,14 @@
 Esta hoja de ruta desglosa el desarrollo de un motor de reconocimiento óptico de partituras con máxima precisión, preparado para partituras polifónicas extensas y documentos PDF multipágina. Cada bloque incluye las tareas principales y las pruebas mínimas necesarias antes de avanzar al siguiente.
 
 ## 1. Preparar pipeline de entrada robusto
-- Implementar ingesta de archivos PDF, imágenes escaneadas y fotografías en `src/io/`.
-- Integrar conversión de PDF a imagen y normalización de DPI en `src/preprocess/normalize.py`.
-- Añadir detección y corrección de inclinación con OpenCV (`deskew_image`).
-- Configurar pipeline de preprocesamiento con denoise, corrección de iluminación y binarización adaptativa.
+- [x] Implementar ingesta de archivos PDF, imágenes escaneadas y fotografías en `src/io/`.
+- [x] Integrar conversión de PDF a imagen y normalización de DPI en `src/preprocess/normalize.py`.
+- [x] Añadir detección y corrección de inclinación con OpenCV (`deskew_image`).
+- [x] Configurar pipeline de preprocesamiento con denoise, corrección de iluminación y binarización adaptativa.
 
 ### Pruebas
-- Crear pruebas unitarias en `tests/test_preprocess.py` para validar la normalización de DPI y la corrección de inclinación.
-- Generar fixtures de imágenes ruidosas y PDF de ejemplo en `tests/fixtures/preprocess/` y verificar la salida esperada.
+- [x] Crear pruebas unitarias en `tests/test_preprocess.py` para validar la normalización de DPI y la corrección de inclinación.
+- [x] Generar fixtures de imágenes ruidosas y PDF de ejemplo en `tests/fixtures/preprocess/` y verificar la salida esperada.
 
 ## 2. Segregar pentagramas y sistemas
 - Detectar márgenes y cabeceras (títulos, notas de texto) en `src/layout/detect_headers.py`.
