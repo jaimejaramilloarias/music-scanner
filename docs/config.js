@@ -12,6 +12,14 @@ const DEFAULT_LOCAL_BACKEND_URL = "http://localhost:8000";
 const DEFAULT_PRODUCTION_BACKEND_URL = "https://music-scanner-backend.fly.dev";
 
 function isLocalhost(hostname) {
+  if (typeof window !== "undefined" && window.location?.protocol === "file:") {
+    return true;
+  }
+
+  if (!hostname) {
+    return true;
+  }
+
   return (
     hostname === "localhost" ||
     hostname === "127.0.0.1" ||
