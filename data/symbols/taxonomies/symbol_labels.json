@@ -1,0 +1,50 @@
+{
+  "version": "0.1",
+  "description": "Taxonomía base de símbolos musicales para tareas de detección y clasificación.",
+  "labels": [
+    {"id": 1, "name": "clef_treble", "aliases": ["G_clef"]},
+    {"id": 2, "name": "clef_bass", "aliases": ["F_clef"]},
+    {"id": 3, "name": "clef_alto", "aliases": ["C_clef"]},
+    {"id": 4, "name": "time_signature_common", "aliases": ["C"]},
+    {"id": 5, "name": "time_signature_cut_common", "aliases": ["cut_C"]},
+    {"id": 6, "name": "time_signature_numeric", "aliases": []},
+    {"id": 7, "name": "key_signature_sharp", "aliases": ["sharp_key"]},
+    {"id": 8, "name": "key_signature_flat", "aliases": ["flat_key"]},
+    {"id": 9, "name": "notehead_whole", "aliases": ["semibreve"]},
+    {"id": 10, "name": "notehead_half", "aliases": ["minim"]},
+    {"id": 11, "name": "notehead_quarter", "aliases": ["crotchet"]},
+    {"id": 12, "name": "notehead_eighth", "aliases": ["quaver"]},
+    {"id": 13, "name": "notehead_sixteenth", "aliases": ["semiquaver"]},
+    {"id": 14, "name": "notehead_thirty_second", "aliases": ["demisemiquaver"]},
+    {"id": 15, "name": "rest_whole", "aliases": ["semibreve_rest"]},
+    {"id": 16, "name": "rest_half", "aliases": ["minim_rest"]},
+    {"id": 17, "name": "rest_quarter", "aliases": ["crotchet_rest"]},
+    {"id": 18, "name": "rest_eighth", "aliases": ["quaver_rest"]},
+    {"id": 19, "name": "rest_sixteenth", "aliases": ["semiquaver_rest"]},
+    {"id": 20, "name": "rest_thirty_second", "aliases": ["demisemiquaver_rest"]},
+    {"id": 21, "name": "accidental_sharp", "aliases": []},
+    {"id": 22, "name": "accidental_flat", "aliases": []},
+    {"id": 23, "name": "accidental_natural", "aliases": []},
+    {"id": 24, "name": "dot_aug", "aliases": ["augmentation_dot"]},
+    {"id": 25, "name": "beam_single", "aliases": ["beam"]},
+    {"id": 26, "name": "beam_multiple", "aliases": ["multi_beam"]},
+    {"id": 27, "name": "slur", "aliases": ["tie_curve"]},
+    {"id": 28, "name": "articulation_staccato", "aliases": []},
+    {"id": 29, "name": "articulation_tenuto", "aliases": []},
+    {"id": 30, "name": "dynamic_mark", "aliases": ["dynamics"]},
+    {"id": 31, "name": "fermata", "aliases": []},
+    {"id": 32, "name": "repeat_sign", "aliases": ["bar_repeat"]}
+  ],
+  "metadata": {
+    "default_partition": {
+      "train": 0.7,
+      "val": 0.2,
+      "test": 0.1
+    },
+    "attributes": [
+      {"name": "staff_id", "type": "integer", "required": true},
+      {"name": "voice_hint", "type": "string", "required": false},
+      {"name": "source_score", "type": "string", "required": true}
+    ]
+  }
+}
