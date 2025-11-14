@@ -55,10 +55,11 @@ Este repositorio contiene una aplicación sencilla que permite convertir imágen
 
 ## Configuración del frontend
 
-1. Editar `docs/config.js` y actualizar `OMR_API_BASE_URL` con la URL real del backend.
-   - En el mismo archivo puedes ajustar `OMR_PROCESSING_MODES` para que la lista de modos disponibles coincida con los configurados en el servidor.
+1. Editar `docs/config.js` y actualizar `window.OMR_CONFIG.apiBaseUrl` con la URL real del backend.
+   - En el mismo archivo puedes ajustar `window.OMR_CONFIG.processingModes` para que la lista de modos disponibles coincida con los configurados en el servidor.
 2. Publicar la carpeta `docs/` mediante GitHub Pages (ramas principales -> carpeta `/docs`).
 3. Abrir la página en el navegador, seleccionar una partitura y pulsar **Procesar partitura**.
+4. Desde la propia página puedes modificar la URL del backend en el bloque **Configuración del backend** y comprobar la conexión con el botón **Comprobar conexión**. La aplicación recuerda la última URL válida en el navegador y también acepta el parámetro `?backend=` en el enlace de GitHub Pages.
 
 El frontend valida el tipo y tamaño del archivo antes de enviarlo, muestra estados informativos durante el procesamiento y presenta mensajes de error normalizados si algo falla.
 
