@@ -35,16 +35,8 @@
 
   const ALLOWED_PUBLIC_APP_URLS = [
     'https://jaimejaramilloarias.github.io/music-scanner',
+    'https://jaimejaramilloarias.github.io/music-scanner/',
   ];
-
-  function isLocalDevelopmentHost(hostname) {
-    return (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '::1' ||
-      hostname.endsWith('.local')
-    );
-  }
 
   function normalizePublicUrl(url) {
     if (typeof url !== 'string') {
@@ -70,11 +62,6 @@
   }
 
   function enforceAllowedFrontendLocation() {
-    const hostname = window.location.hostname;
-    if (isLocalDevelopmentHost(hostname)) {
-      return true;
-    }
-
     const currentUrl = normalizePublicUrl(`${window.location.origin}${window.location.pathname}`);
     const isAllowed = ALLOWED_PUBLIC_APP_URLS.some((allowedUrl) => {
       const normalizedAllowed = normalizePublicUrl(allowedUrl);
@@ -86,7 +73,7 @@
     }
 
     const warningMessage =
-      'Esta aplicación solo está disponible desde https://jaimejaramilloarias.github.io/music-scanner/.';
+      'Esta aplicación solo está disponible desde https://jaimejaramilloarias.github.io/music-scanner/. No es posible ejecutarla de forma local.';
     setStatus(warningMessage, 'error');
     updateBackendStatus(warningMessage, 'error');
 
