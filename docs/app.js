@@ -37,6 +37,21 @@
     'https://jaimejaramilloarias.github.io/music-scanner',
     'https://jaimejaramilloarias.github.io/music-scanner/',
   ];
+  const ALLOWED_LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+
+  function isLocalEnvironment() {
+    const { protocol, hostname } = window.location;
+
+    if (protocol === 'file:') {
+      return true;
+    }
+
+    if (!hostname) {
+      return true;
+    }
+
+    return ALLOWED_LOCAL_HOSTNAMES.has(hostname) || hostname.endsWith('.local');
+  }
 
   function normalizePublicUrl(url) {
     if (typeof url !== 'string') {
@@ -62,6 +77,15 @@
   }
 
   function enforceAllowedFrontendLocation() {
+    if (isLocalEnvironment()) {
+      updateBackendStatus(
+        'Modo local detectado. Configura la URL del backend si es necesario y asegúrate de que esté en ejecución.',
+        'info',
+      );
+      setStatus('Aplicación en modo local. Puedes usar un backend en http://localhost:8000 por defecto.', 'info');
+      return true;
+    }
+
     const currentUrl = normalizePublicUrl(`${window.location.origin}${window.location.pathname}`);
     const isAllowed = ALLOWED_PUBLIC_APP_URLS.some((allowedUrl) => {
       const normalizedAllowed = normalizePublicUrl(allowedUrl);
@@ -163,6 +187,10 @@
       return null;
     }
 
+    if (trimmed === 'null') {
+      return null;
+    }
+
     let candidate = trimmed;
     if (!/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(candidate)) {
       if (candidate.startsWith('//')) {
@@ -195,6 +223,15 @@
       return window.OMR_API_BASE_URL;
     }
     return null;
+  }
+
+  function getSameOriginBackendUrl() {
+    const { origin, protocol } = window.location;
+    if (protocol === 'file:' || !origin || origin === 'null') {
+      return null;
+    }
+
+    return normalizeBackendUrl(origin);
   }
 
   function getBackendUrlFromStorage() {
@@ -315,7 +352,7 @@
     const queryBackend = normalizeBackendUrl(getBackendUrlFromQuery());
     const storedBackend = normalizeBackendUrl(getBackendUrlFromStorage());
     const configuredBackend = normalizeBackendUrl(getBackendUrlFromConfig());
-    const fallbackBackend = normalizeBackendUrl(window.location.origin);
+    const fallbackBackend = getSameOriginBackendUrl();
 
     if (queryBackend && setBackendUrl(queryBackend, { persist: true, announce: false })) {
       updateBackendStatus(
@@ -360,7 +397,7 @@
     safeRemoveFromStorage(STORAGE_KEYS.backendUrl);
 
     const configuredBackend = normalizeBackendUrl(getBackendUrlFromConfig());
-    const fallbackBackend = normalizeBackendUrl(window.location.origin);
+    const fallbackBackend = getSameOriginBackendUrl();
 
     if (configuredBackend && setBackendUrl(configuredBackend, { announce: false })) {
       updateBackendStatus('Se restableció la URL definida en config.js.', 'info');

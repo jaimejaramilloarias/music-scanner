@@ -60,6 +60,7 @@ Este repositorio contiene una aplicación sencilla que permite convertir imágen
 3. Si quieres desarrollar en local, el frontend cambia automáticamente la URL al abrirse desde `http://localhost` y utilizará `http://localhost:8000`.
 4. Desde la propia página puedes modificar la URL del backend en el bloque **Configuración del backend** y comprobar la conexión con el botón **Comprobar conexión**. La aplicación recuerda la última URL válida en el navegador y también acepta el parámetro `?backend=` en el enlace de GitHub Pages.
 5. En `docs/config.js` puedes personalizar `window.OMR_CONFIG.processingModes` para que la lista de modos disponibles coincida con los configurados en el servidor o, si despliegas tu propio backend público, actualizar `DEFAULT_PRODUCTION_BACKEND_URL` con la nueva dirección.
+6. Si abres `docs/index.html` directamente desde el repositorio (por ejemplo, con `file://` o sirviendo la carpeta con un servidor estático), la aplicación se ejecuta en modo local y utilizará `http://localhost:8000` como backend por defecto, mostrándote un aviso para que ajustes la URL si lo necesitas.
 
 El frontend valida el tipo y tamaño del archivo antes de enviarlo, muestra estados informativos durante el procesamiento y presenta mensajes de error normalizados si algo falla.
 
