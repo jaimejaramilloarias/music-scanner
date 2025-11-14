@@ -33,6 +33,107 @@
   let backendReachable = false;
   let backendHealthRequestId = 0;
 
+  const ALLOWED_PUBLIC_APP_URLS = [
+    'https://jaimejaramilloarias.github.io/music-scanner',
+  ];
+
+  function isLocalDevelopmentHost(hostname) {
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '::1' ||
+      hostname.endsWith('.local')
+    );
+  }
+
+  function normalizePublicUrl(url) {
+    if (typeof url !== 'string') {
+      return null;
+    }
+
+    try {
+      const parsed = new URL(url, window.location.origin);
+      parsed.hash = '';
+      parsed.search = '';
+      const pathname = parsed.pathname.replace(/\/+$/, '');
+      return `${parsed.origin}${pathname}`;
+    } catch (error) {
+      console.warn('No se pudo normalizar la URL proporcionada.', url, error);
+      return null;
+    }
+  }
+
+  function setStatus(message, type = 'info') {
+    statusElement.textContent = message;
+    statusElement.classList.remove('info', 'error', 'success');
+    statusElement.classList.add(type);
+  }
+
+  function enforceAllowedFrontendLocation() {
+    const hostname = window.location.hostname;
+    if (isLocalDevelopmentHost(hostname)) {
+      return true;
+    }
+
+    const currentUrl = normalizePublicUrl(`${window.location.origin}${window.location.pathname}`);
+    const isAllowed = ALLOWED_PUBLIC_APP_URLS.some((allowedUrl) => {
+      const normalizedAllowed = normalizePublicUrl(allowedUrl);
+      return normalizedAllowed && currentUrl && currentUrl.startsWith(normalizedAllowed);
+    });
+
+    if (isAllowed) {
+      return true;
+    }
+
+    const warningMessage =
+      'Esta aplicación solo está disponible desde https://jaimejaramilloarias.github.io/music-scanner/.';
+    setStatus(warningMessage, 'error');
+    updateBackendStatus(warningMessage, 'error');
+
+    const elementsToDisable = [
+      fileInput,
+      processButton,
+      backendUrlInput,
+      backendApplyButton,
+      backendResetButton,
+      backendCheckButton,
+      pageInput,
+      processingModeSelect,
+      advancedParamsInput,
+    ];
+
+    elementsToDisable.forEach((element) => {
+      if (element) {
+        element.disabled = true;
+        element.setAttribute('aria-disabled', 'true');
+      }
+    });
+
+    if (resultsContainer) {
+      resultsContainer.innerHTML =
+        '<p class="placeholder">La aplicación solo funciona desde <a href="https://jaimejaramilloarias.github.io/music-scanner/" target="_blank" rel="noopener">https://jaimejaramilloarias.github.io/music-scanner/</a>.</p>';
+    }
+
+    if (historyContainer) {
+      historyContainer.innerHTML =
+        '<p class="placeholder">El historial no está disponible fuera del dominio autorizado.</p>';
+    }
+
+    if (previewStatusElement) {
+      previewStatusElement.textContent =
+        'La previsualización está deshabilitada fuera del dominio autorizado.';
+      previewStatusElement.classList.remove('info', 'success');
+      previewStatusElement.classList.add('error');
+    }
+
+    if (previewContentElement) {
+      previewContentElement.innerHTML =
+        '<p class="placeholder">Accede mediante el enlace oficial para ver los resultados.</p>';
+    }
+
+    return false;
+  }
+
   if (window.pdfjsLib?.GlobalWorkerOptions) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js';
@@ -383,12 +484,6 @@
   function formatCliArguments(argumentsArray) {
     const sanitized = sanitizeCliArguments(argumentsArray);
     return sanitized.join(' ');
-  }
-
-  function setStatus(message, type = 'info') {
-    statusElement.textContent = message;
-    statusElement.classList.remove('info', 'error', 'success');
-    statusElement.classList.add(type);
   }
 
   function resetResults() {
@@ -975,6 +1070,10 @@
 
     setStatus('Preparando archivo para enviar…');
     void sendFile(file, pageNumberToSend);
+  }
+
+  if (!enforceAllowedFrontendLocation()) {
+    return;
   }
 
   populateProcessingModeOptions();
