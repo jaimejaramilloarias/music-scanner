@@ -22,13 +22,13 @@ Esta hoja de ruta desglosa el desarrollo de un motor de reconocimiento óptico d
 - [x] Incluir pruebas de regresión visual automatizadas comparando máscaras generadas con fixtures en `tests/fixtures/layout/`.
 
 ## 3. Rectificar y alinear pentagramas
-- Crear funciones para enderezar líneas onduladas (warping) en `src/layout/staff_rectifier.py`.
-- Establecer referencia de altura entre líneas y espacios para cuantificar la posición vertical.
-- Ajustar contraste y grosor de líneas mediante operaciones morfológicas.
+- [x] Crear funciones para enderezar líneas onduladas (warping) en `src/layout/staff_rectifier.py`.
+- [x] Establecer referencia de altura entre líneas y espacios para cuantificar la posición vertical.
+- [x] Ajustar contraste y grosor de líneas mediante operaciones morfológicas.
 
 ### Pruebas
-- Incorporar pruebas numéricas que validen la desviación máxima permitida tras la rectificación (`tests/layout/test_rectifier.py`).
-- Ejecutar pruebas E2E con pentagramas curvos para garantizar la correcta alineación antes de continuar.
+- [x] Incorporar pruebas numéricas que validen la desviación máxima permitida tras la rectificación (`tests/layout/test_rectifier.py`).
+- [x] Ejecutar pruebas E2E con pentagramas curvos para garantizar la correcta alineación antes de continuar.
 
 ## 4. Modelo de detección y clasificación de símbolos
 - Definir dataset etiquetado de símbolos musicales en `data/symbols/`.
