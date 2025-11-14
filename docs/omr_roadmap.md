@@ -31,7 +31,7 @@ Esta hoja de ruta desglosa el desarrollo de un motor de reconocimiento óptico d
 - [x] Ejecutar pruebas E2E con pentagramas curvos para garantizar la correcta alineación antes de continuar.
 
 ## 4. Modelo de detección y clasificación de símbolos
-- Definir dataset etiquetado de símbolos musicales en `data/symbols/`.
+- [x] Definir dataset etiquetado de símbolos musicales en `data/symbols/`.
 - Entrenar detector (por ejemplo, YOLOv8) en `src/models/detector.py` con augmentations polifónicas.
 - Crear clasificador secundario para variantes de figuras y articulaciones en `src/models/classifier.py`.
 - Integrar postprocesamiento para eliminar duplicados y validar solapamientos.
