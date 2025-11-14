@@ -13,13 +13,13 @@ Esta hoja de ruta desglosa el desarrollo de un motor de reconocimiento óptico d
 - [x] Generar fixtures de imágenes ruidosas y PDF de ejemplo en `tests/fixtures/preprocess/` y verificar la salida esperada.
 
 ## 2. Segregar pentagramas y sistemas
-- Detectar márgenes y cabeceras (títulos, notas de texto) en `src/layout/detect_headers.py`.
-- Desarrollar segmentador de sistemas musicales mediante detección de líneas de pentagrama (`src/layout/staff_detection.py`).
-- Implementar agrupación de pentagramas en sistemas por claves y corchetes.
+- [x] Detectar márgenes y cabeceras (títulos, notas de texto) en `src/layout/detect_headers.py`.
+- [x] Desarrollar segmentador de sistemas musicales mediante detección de líneas de pentagrama (`src/layout/staff_detection.py`).
+- [x] Implementar agrupación de pentagramas en sistemas por claves y corchetes.
 
 ### Pruebas
-- Añadir pruebas de integración en `tests/layout/test_staff_detection.py` con imágenes de diferentes formatos de página.
-- Incluir pruebas de regresión visual automatizadas comparando máscaras generadas con fixtures en `tests/fixtures/layout/`.
+- [x] Añadir pruebas de integración en `tests/layout/test_staff_detection.py` con imágenes de diferentes formatos de página.
+- [x] Incluir pruebas de regresión visual automatizadas comparando máscaras generadas con fixtures en `tests/fixtures/layout/`.
 
 ## 3. Rectificar y alinear pentagramas
 - Crear funciones para enderezar líneas onduladas (warping) en `src/layout/staff_rectifier.py`.
