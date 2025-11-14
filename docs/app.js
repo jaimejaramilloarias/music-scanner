@@ -1,236 +1,773 @@
 (function () {
+  'use strict';
+
+  const dropZone = document.getElementById('dropZone');
   const fileInput = document.getElementById('scoreFile');
+  const selectedFileInfo = document.getElementById('selectedFileInfo');
   const processButton = document.getElementById('processButton');
   const statusElement = document.getElementById('status');
   const resultsContainer = document.getElementById('results');
-  const historyContainer = document.getElementById('history');
+  const analysisDetails = document.getElementById('analysisDetails');
   const previewStatusElement = document.getElementById('previewStatus');
   const previewContentElement = document.getElementById('previewContent');
-  const pdfOptions = document.getElementById('pdfOptions');
-  const pageInput = document.getElementById('pageNumber');
-  const pageDetails = document.getElementById('pageDetails');
-  const processingModeSelect = document.getElementById('processingMode');
-  const advancedParamsInput = document.getElementById('advancedParams');
-  const backendUrlInput = document.getElementById('backendUrl');
-  const backendApplyButton = document.getElementById('applyBackendUrl');
-  const backendResetButton = document.getElementById('resetBackendUrl');
-  const backendCheckButton = document.getElementById('checkBackendButton');
-  const backendStatusElement = document.getElementById('backendStatus');
+  const historyContainer = document.getElementById('history');
+
+  const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
+  const ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg']);
+  const ALLOWED_EXTENSIONS = new Set(['png', 'jpg', 'jpeg']);
+
   const conversions = [];
-  const DEMO_BACKEND_TOKENS = new Set(['demo', 'stub', 'browser', 'demo-mode']);
   const generatedObjectUrls = new Set();
   const historyDateFormatter = new Intl.DateTimeFormat('es-ES', {
-    dateStyle: 'short',
-    timeStyle: 'medium',
+    dateStyle: 'medium',
+    timeStyle: 'short',
   });
-  const STORAGE_KEYS = {
-    backendUrl: 'omrBackendUrl',
-  };
-  const queryParameters = new URLSearchParams(window.location.search);
-  let currentPdfPageCount = null;
-  let verovioToolkitInstance = null;
-  let verovioToolkitError = false;
-  let verovioToolkitPromise = null;
-  let currentBackendUrl = null;
-  let backendReachable = false;
-  let backendHealthRequestId = 0;
-  let backendMode = 'remote'; // 'remote' | 'demo'
-  let demoFallbackActive = false;
-  const demoFallbackEnabled = window.OMR_CONFIG?.enableDemoFallback !== false;
+
+  let selectedFile = null;
+
+  const cvReadyPromise = new Promise((resolve, reject) => {
+    if (window.cv?.Mat) {
+      resolve();
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error('OpenCV.js tardó demasiado en inicializarse. Recarga la página.'));
+    }, 20000);
+
+    window.addEventListener(
+      'opencv-ready',
+      () => {
+        window.clearTimeout(timeoutId);
+        resolve();
+      },
+      { once: true },
+    );
+
+    window.addEventListener(
+      'opencv-error',
+      (event) => {
+        window.clearTimeout(timeoutId);
+        reject(event?.detail ?? new Error('No se pudo cargar OpenCV.js. Verifica tu conexión.'));
+      },
+      { once: true },
+    );
+  });
+
+  const verovioToolkitPromise = new Promise((resolve) => {
+    const initialise = () => {
+      try {
+        resolve(new window.verovio.toolkit());
+      } catch (error) {
+        console.warn('No se pudo inicializar Verovio.', error);
+        resolve(null);
+      }
+    };
+
+    if (window.verovio?.toolkit) {
+      initialise();
+    } else {
+      window.addEventListener('verovio-ready', initialise, { once: true });
+      window.addEventListener(
+        'verovio-error',
+        (event) => {
+          console.warn('No se pudo cargar la librería de Verovio.', event?.detail);
+          resolve(null);
+        },
+        { once: true },
+      );
+    }
+  });
 
   window.addEventListener('beforeunload', () => {
     generatedObjectUrls.forEach((url) => {
       try {
         URL.revokeObjectURL(url);
       } catch (error) {
-        console.warn('No se pudo liberar un objeto generado para la demo.', error);
+        console.warn('No se pudo liberar un recurso temporal.', error);
       }
     });
     generatedObjectUrls.clear();
   });
 
-  const ALLOWED_PUBLIC_APP_URLS = [
-    'https://jaimejaramilloarias.github.io/music-scanner',
-    'https://jaimejaramilloarias.github.io/music-scanner/',
-  ];
-  const ALLOWED_LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+  processButton.disabled = true;
 
-  function isLocalEnvironment() {
-    const { protocol, hostname } = window.location;
-
-    if (protocol === 'file:') {
-      return true;
-    }
-
-    if (!hostname) {
-      return true;
-    }
-
-    return ALLOWED_LOCAL_HOSTNAMES.has(hostname) || hostname.endsWith('.local');
-  }
-
-  function normalizePublicUrl(url) {
-    if (typeof url !== 'string') {
-      return null;
-    }
-
-    try {
-      const parsed = new URL(url, window.location.origin);
-      parsed.hash = '';
-      parsed.search = '';
-      const pathname = parsed.pathname.replace(/\/+$/, '');
-      return `${parsed.origin}${pathname}`;
-    } catch (error) {
-      console.warn('No se pudo normalizar la URL proporcionada.', url, error);
-      return null;
-    }
-  }
+  cvReadyPromise
+    .then(() => {
+      setStatus('Listo para analizar partituras en el navegador. Selecciona un archivo para comenzar.', 'success');
+      processButton.disabled = false;
+    })
+    .catch((error) => {
+      console.error(error);
+      setStatus(error.message, 'error');
+      processButton.disabled = true;
+    });
 
   function setStatus(message, type = 'info') {
     statusElement.textContent = message;
-    statusElement.classList.remove('info', 'error', 'success');
+    statusElement.classList.remove('info', 'success', 'error');
     statusElement.classList.add(type);
   }
 
-  function enforceAllowedFrontendLocation() {
-    if (isLocalEnvironment()) {
-      updateBackendStatus(
-        'Modo local detectado. Configura la URL del backend si es necesario y asegúrate de que esté en ejecución.',
-        'info',
-      );
-      setStatus('Aplicación en modo local. Puedes usar un backend en http://localhost:8000 por defecto.', 'info');
-      return true;
+  function formatFileSize(bytes) {
+    if (!Number.isFinite(bytes)) {
+      return '';
     }
-
-    const currentUrl = normalizePublicUrl(`${window.location.origin}${window.location.pathname}`);
-    const isAllowed = ALLOWED_PUBLIC_APP_URLS.some((allowedUrl) => {
-      const normalizedAllowed = normalizePublicUrl(allowedUrl);
-      return normalizedAllowed && currentUrl && currentUrl.startsWith(normalizedAllowed);
-    });
-
-    if (isAllowed) {
-      return true;
+    const units = ['B', 'KB', 'MB'];
+    let size = bytes;
+    let unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex += 1;
     }
-
-    const warningMessage =
-      'Estás utilizando la aplicación desde un dominio distinto al publicado oficialmente. Puedes continuar, pero asegúrate de configurar un backend accesible desde Internet.';
-    setStatus(warningMessage, 'info');
-    updateBackendStatus(warningMessage, 'info');
-    return true;
+    return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
   }
 
-  if (window.pdfjsLib?.GlobalWorkerOptions) {
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.worker.min.js';
+  function resetResults() {
+    resultsContainer.innerHTML = '<p class="placeholder">Cuando el análisis termine aparecerá aquí un enlace para descargar el MusicXML.</p>';
+    analysisDetails.innerHTML = '';
+    analysisDetails.classList.add('hidden');
+    previewStatusElement.textContent = 'Aún no hay ningún archivo para mostrar.';
+    previewStatusElement.classList.remove('success', 'error');
+    previewStatusElement.classList.add('info');
+    previewContentElement.innerHTML = '<p class="placeholder">Genera un MusicXML para ver la partitura renderizada aquí mismo.</p>';
   }
 
-  function safeGetFromStorage(key) {
-    try {
-      return window.localStorage?.getItem(key) ?? null;
-    } catch (error) {
-      console.warn('No se pudo leer del almacenamiento local.', error);
-      return null;
+  function handleSelectedFile(file) {
+    if (!(file instanceof File)) {
+      return;
     }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setStatus('El archivo supera el límite de 8 MB. Selecciona una imagen más ligera.', 'error');
+      selectedFile = null;
+      dropZone.classList.remove('has-file');
+      selectedFileInfo.textContent = '';
+      selectedFileInfo.classList.add('hidden');
+      resetResults();
+      return;
+    }
+
+    const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+    if (!ALLOWED_MIME_TYPES.has(file.type) && !ALLOWED_EXTENSIONS.has(extension)) {
+      setStatus('Solo se admiten imágenes PNG o JPG. Intenta convertir la partitura a uno de esos formatos.', 'error');
+      selectedFile = null;
+      dropZone.classList.remove('has-file');
+      selectedFileInfo.textContent = '';
+      selectedFileInfo.classList.add('hidden');
+      resetResults();
+      return;
+    }
+
+    selectedFile = file;
+    dropZone.classList.add('has-file');
+    selectedFileInfo.textContent = `Archivo seleccionado: ${file.name} (${formatFileSize(file.size)})`;
+    selectedFileInfo.classList.remove('hidden');
+    setStatus('Archivo listo. Pulsa “Procesar partitura” para iniciar el análisis.', 'info');
   }
 
-  function safeSetInStorage(key, value) {
-    try {
-      window.localStorage?.setItem(key, value);
-      return true;
-    } catch (error) {
-      console.warn('No se pudo guardar en el almacenamiento local.', error);
-      return false;
-    }
-  }
-
-  function safeRemoveFromStorage(key) {
-    try {
-      window.localStorage?.removeItem(key);
-    } catch (error) {
-      console.warn('No se pudo eliminar la clave del almacenamiento local.', error);
-    }
-  }
-
-  function normalizeBackendUrl(rawUrl) {
-    if (typeof rawUrl !== 'string') {
-      return null;
-    }
-
-    const trimmed = rawUrl.trim();
-    if (!trimmed) {
-      return null;
-    }
-
-    if (trimmed === 'null') {
-      return null;
-    }
-
-    const keyword = trimmed.toLowerCase();
-    if (DEMO_BACKEND_TOKENS.has(keyword)) {
-      return 'demo';
-    }
-
-    let candidate = trimmed;
-    if (!/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(candidate)) {
-      if (candidate.startsWith('//')) {
-        candidate = `https:${candidate}`;
-      } else if (!candidate.startsWith('/')) {
-        candidate = `https://${candidate}`;
+  async function loadImageBitmap(file) {
+    if (window.createImageBitmap) {
+      try {
+        return await window.createImageBitmap(file, { imageOrientation: 'from-image' });
+      } catch (error) {
+        console.warn('No se pudo usar createImageBitmap, se usará un lector alternativo.', error);
       }
     }
 
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      image.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(image);
+      };
+      image.onerror = (event) => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('No se pudo leer la imagen seleccionada.'));
+      };
+      image.src = objectUrl;
+    });
+  }
+
+  async function processCurrentScore() {
+    if (!selectedFile) {
+      setStatus('Selecciona primero una imagen de partitura.', 'error');
+      return;
+    }
+
+    processButton.disabled = true;
+
     try {
-      const parsed = new URL(candidate, window.location.origin);
-      parsed.hash = '';
-      parsed.search = '';
-      return parsed.toString().replace(/\/+$/, '');
+      await cvReadyPromise;
+      setStatus('Preparando la imagen para el análisis…', 'info');
+      resetResults();
+
+      const imageSource = await loadImageBitmap(selectedFile);
+      setStatus('Detectando pentagramas y notas…', 'info');
+      const startTime = performance.now();
+      const analysis = await analyseScore(imageSource, selectedFile.name);
+      const elapsed = performance.now() - startTime;
+
+      setStatus(
+        `Listo. Se detectaron ${analysis.notes.length === 1 ? '1 nota' : `${analysis.notes.length} notas`} en ${elapsed.toFixed(
+          0,
+        )} ms.`,
+        'success',
+      );
+
+      const downloadData = renderResults(analysis, selectedFile);
+      renderAnalysisDetails(analysis);
+      await renderPreview(analysis.xml);
+      addConversionToHistory({
+        timestamp: new Date(),
+        originalName: selectedFile.name,
+        notes: analysis.notes,
+        downloadUrl: downloadData.url,
+        downloadName: downloadData.filename,
+      });
     } catch (error) {
-      console.warn('URL de backend no válida:', rawUrl, error);
+      console.error(error);
+      setStatus(error.message || 'Algo salió mal durante el análisis.', 'error');
+    } finally {
+      processButton.disabled = false;
+    }
+  }
+
+  function renderResults(analysis, file) {
+    resultsContainer.innerHTML = '';
+
+    const safeTitle = sanitiseTitle(file?.name);
+    const blob = new Blob([analysis.xml], {
+      type: 'application/vnd.recordare.musicxml+xml',
+    });
+    const objectUrl = URL.createObjectURL(blob);
+    generatedObjectUrls.add(objectUrl);
+
+    const downloadLink = document.createElement('a');
+    downloadLink.href = objectUrl;
+    downloadLink.download = `${createSlug(safeTitle)}.musicxml`;
+    downloadLink.className = 'download-link';
+    downloadLink.innerHTML = '<span aria-hidden="true">⬇️</span><span>Descargar MusicXML</span>';
+
+    const summary = document.createElement('p');
+    summary.textContent =
+      analysis.notes.length === 1
+        ? 'Se detectó una nota negra.'
+        : `Se detectaron ${analysis.notes.length} notas negras consecutivas.`;
+
+    resultsContainer.append(downloadLink, summary);
+
+    if (analysis.overlayUrl) {
+      const figure = document.createElement('figure');
+      const image = document.createElement('img');
+      image.src = analysis.overlayUrl;
+      image.alt = 'Visualización con las líneas y notas detectadas.';
+      figure.appendChild(image);
+      const caption = document.createElement('figcaption');
+      caption.textContent = 'Líneas de pentagrama y centros de nota identificados por el algoritmo en tu navegador.';
+      figure.appendChild(caption);
+      resultsContainer.appendChild(figure);
+    }
+
+    return { url: objectUrl, filename: `${createSlug(safeTitle)}.musicxml` };
+  }
+
+  function renderAnalysisDetails(analysis) {
+    if (!analysis.notes.length) {
+      analysisDetails.innerHTML =
+        '<p>No se encontraron notas reconocibles. Asegúrate de que la imagen sea clara y contenga una sola voz.</p>';
+      analysisDetails.classList.remove('hidden');
+      return;
+    }
+
+    const list = document.createElement('ul');
+    analysis.notes.forEach((note) => {
+      const item = document.createElement('li');
+      item.textContent = `Compás ${note.measure}, tiempo ${note.beat}: ${note.pitch.step}${note.pitch.octave}`;
+      list.appendChild(item);
+    });
+
+    analysisDetails.innerHTML = '<p>Alturas detectadas en orden de aparición:</p>';
+    analysisDetails.appendChild(list);
+    analysisDetails.classList.remove('hidden');
+  }
+
+  async function renderPreview(xml) {
+    const toolkit = await verovioToolkitPromise;
+    if (!toolkit) {
+      previewStatusElement.textContent = 'El visor integrado no está disponible. Descarga el MusicXML para revisarlo.';
+      previewStatusElement.classList.remove('info', 'success');
+      previewStatusElement.classList.add('error');
+      previewContentElement.innerHTML = '<p class="placeholder">Puedes abrir el archivo en MuseScore, Dorico o Finale.</p>';
+      return;
+    }
+
+    try {
+      toolkit.setOptions({
+        scale: 50,
+        pageHeight: 2970,
+        pageWidth: 2100,
+        adjustPageHeight: true,
+      });
+      const svg = toolkit.renderData(xml, { page: 1 });
+      previewStatusElement.textContent = 'Previsualización generada con Verovio.';
+      previewStatusElement.classList.remove('info', 'error');
+      previewStatusElement.classList.add('success');
+      previewContentElement.innerHTML = svg;
+    } catch (error) {
+      console.error('Error al renderizar con Verovio:', error);
+      previewStatusElement.textContent = 'No se pudo renderizar el MusicXML automáticamente.';
+      previewStatusElement.classList.remove('info', 'success');
+      previewStatusElement.classList.add('error');
+      previewContentElement.innerHTML = '<p class="placeholder">Descarga el archivo y ábrelo con tu editor favorito.</p>';
+    }
+  }
+
+  function addConversionToHistory(entry) {
+    conversions.unshift(entry);
+    if (conversions.length > 5) {
+      const removed = conversions.pop();
+      if (removed?.downloadUrl) {
+        try {
+          URL.revokeObjectURL(removed.downloadUrl);
+          generatedObjectUrls.delete(removed.downloadUrl);
+        } catch (error) {
+          console.warn('No se pudo liberar un resultado antiguo.', error);
+        }
+      }
+    }
+    renderHistory();
+  }
+
+  function renderHistory() {
+    if (!conversions.length) {
+      historyContainer.innerHTML = '<p class="placeholder">Tus últimas conversiones aparecerán en esta lista.</p>';
+      return;
+    }
+
+    historyContainer.innerHTML = '';
+    conversions.forEach((conversion, index) => {
+      const card = document.createElement('article');
+      card.className = 'history-card';
+
+      const title = document.createElement('h3');
+      title.textContent = sanitiseTitle(conversion.originalName);
+      card.appendChild(title);
+
+      const time = document.createElement('time');
+      time.dateTime = conversion.timestamp.toISOString();
+      time.textContent = historyDateFormatter.format(conversion.timestamp);
+      card.appendChild(time);
+
+      const notesLine = document.createElement('p');
+      notesLine.className = 'note-list';
+      notesLine.textContent = conversion.notes.length
+        ? conversion.notes.map((note) => `${note.pitch.step}${note.pitch.octave}`).join(', ')
+        : 'Sin notas detectadas';
+      card.appendChild(notesLine);
+
+      const link = document.createElement('a');
+      link.href = conversion.downloadUrl;
+      link.download = conversion.downloadName;
+      link.className = 'download-link';
+      link.innerHTML = '<span aria-hidden="true">↺</span><span>Descargar nuevamente</span>';
+      card.appendChild(link);
+
+      historyContainer.appendChild(card);
+    });
+  }
+
+  async function analyseScore(imageSource, fileName) {
+    await cvReadyPromise;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = imageSource.width;
+    canvas.height = imageSource.height;
+    const context = canvas.getContext('2d');
+    context.drawImage(imageSource, 0, 0);
+    if (typeof imageSource.close === 'function') {
+      imageSource.close();
+    }
+
+    const src = cv.imread(canvas);
+    const grayscale = new cv.Mat();
+    cv.cvtColor(src, grayscale, cv.COLOR_RGBA2GRAY, 0);
+
+    const blurred = new cv.Mat();
+    cv.GaussianBlur(grayscale, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+
+    const binary = new cv.Mat();
+    cv.adaptiveThreshold(
+      blurred,
+      binary,
+      255,
+      cv.ADAPTIVE_THRESH_MEAN_C,
+      cv.THRESH_BINARY_INV,
+      15,
+      8,
+    );
+
+    const horizontal = new cv.Mat();
+    const horizontalKernelSize = Math.max(15, Math.round(src.cols / 18));
+    const horizontalKernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(horizontalKernelSize, 1));
+    cv.erode(binary, horizontal, horizontalKernel);
+    cv.dilate(horizontal, horizontal, horizontalKernel);
+
+    const withoutStaff = new cv.Mat();
+    cv.subtract(binary, horizontal, withoutStaff);
+
+    const cleanKernelSize = Math.max(3, Math.round(src.cols / 120));
+    const noteKernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, new cv.Size(cleanKernelSize, cleanKernelSize));
+    const cleaned = new cv.Mat();
+    cv.morphologyEx(withoutStaff, cleaned, cv.MORPH_OPEN, noteKernel);
+
+    const staffInfo = detectStaffLines(horizontal);
+    if (!staffInfo || staffInfo.lines.length < 5 || !Number.isFinite(staffInfo.spacing)) {
+      disposeMats(src, grayscale, blurred, binary, horizontal, horizontalKernel, withoutStaff, noteKernel, cleaned);
+      throw new Error('No se detectaron suficientes líneas de pentagrama. Usa una imagen con mayor contraste.');
+    }
+
+    const noteComponents = detectNoteComponents(cleaned, staffInfo.lines, staffInfo.spacing, src.cols, src.rows);
+    if (!noteComponents.length) {
+      disposeMats(src, grayscale, blurred, binary, horizontal, horizontalKernel, withoutStaff, noteKernel, cleaned);
+      throw new Error('No se encontraron cabezas de nota claras. Comprueba la nitidez de la partitura.');
+    }
+
+    noteComponents.sort((a, b) => a.cx - b.cx);
+    const notes = noteComponents.map((component, index) => {
+      const stepsFromBase = Math.round((staffInfo.lines[4] - component.cy) / (staffInfo.spacing / 2));
+      const pitch = pitchFromOffset(stepsFromBase);
+      return {
+        pitch,
+        cx: component.cx,
+        cy: component.cy,
+        offset: stepsFromBase,
+        measure: Math.floor(index / 4) + 1,
+        beat: (index % 4) + 1,
+      };
+    });
+
+    const xml = buildMusicXml(notes, fileName);
+    const overlayUrl = createOverlayImage(canvas, staffInfo.lines, notes, staffInfo.spacing);
+
+    disposeMats(src, grayscale, blurred, binary, horizontal, horizontalKernel, withoutStaff, noteKernel, cleaned);
+
+    return {
+      xml,
+      notes,
+      staffLines: staffInfo.lines,
+      spacing: staffInfo.spacing,
+      overlayUrl,
+    };
+  }
+
+  function disposeMats(...mats) {
+    mats.forEach((mat) => {
+      if (mat && typeof mat.delete === 'function') {
+        mat.delete();
+      }
+    });
+  }
+
+  function detectStaffLines(horizontalMat) {
+    const rows = horizontalMat.rows;
+    const cols = horizontalMat.cols;
+    const lineScores = new Array(rows).fill(0);
+
+    for (let y = 0; y < rows; y += 1) {
+      let sum = 0;
+      for (let x = 0; x < cols; x += 1) {
+        if (horizontalMat.ucharPtr(y, x)[0] > 0) {
+          sum += 1;
+        }
+      }
+      lineScores[y] = sum;
+    }
+
+    const maxScore = Math.max(...lineScores);
+    if (!Number.isFinite(maxScore) || maxScore === 0) {
+      return null;
+    }
+
+    const threshold = maxScore * 0.6;
+    const candidates = [];
+    for (let y = 0; y < rows; y += 1) {
+      if (lineScores[y] >= threshold) {
+        candidates.push(y);
+      }
+    }
+
+    if (!candidates.length) {
+      return null;
+    }
+
+    const clusters = [];
+    let cluster = [candidates[0]];
+    for (let i = 1; i < candidates.length; i += 1) {
+      const current = candidates[i];
+      const previous = candidates[i - 1];
+      if (current - previous <= 1) {
+        cluster.push(current);
+      } else {
+        clusters.push(cluster);
+        cluster = [current];
+      }
+    }
+    clusters.push(cluster);
+
+    const positions = clusters.map((group) => Math.round(group.reduce((sum, value) => sum + value, 0) / group.length));
+    positions.sort((a, b) => a - b);
+
+    if (positions.length < 5) {
+      return null;
+    }
+
+    let bestGroup = null;
+    for (let i = 0; i <= positions.length - 5; i += 1) {
+      const group = positions.slice(i, i + 5);
+      const gaps = [];
+      for (let j = 1; j < group.length; j += 1) {
+        gaps.push(group[j] - group[j - 1]);
+      }
+      const mean = gaps.reduce((sum, value) => sum + value, 0) / gaps.length;
+      if (mean <= 0) {
+        continue;
+      }
+      const deviation = gaps.reduce((sum, value) => sum + Math.abs(value - mean), 0) / gaps.length;
+      const score = deviation / mean;
+      if (!bestGroup || score < bestGroup.score) {
+        bestGroup = {
+          lines: group,
+          spacing: mean,
+          score,
+        };
+      }
+    }
+
+    if (!bestGroup) {
+      return {
+        lines: positions.slice(0, 5),
+        spacing: (positions[4] - positions[0]) / 4,
+        score: 1,
+      };
+    }
+
+    return bestGroup;
+  }
+
+  function detectNoteComponents(image, staffLines, spacing, width, height) {
+    const labels = new cv.Mat();
+    const stats = new cv.Mat();
+    const centroids = new cv.Mat();
+    const components = [];
+
+    try {
+      const count = cv.connectedComponentsWithStats(image, labels, stats, centroids, 8, cv.CV_32S);
+      const statsData = stats.data32S;
+      const centroidsData = centroids.data64F;
+
+      const minArea = Math.max(12, spacing * spacing * 0.25);
+      const maxArea = spacing * spacing * 3.2;
+      const minY = staffLines[0] - spacing * 4;
+      const maxY = staffLines[4] + spacing * 4;
+
+      for (let i = 1; i < count; i += 1) {
+        const area = statsData[i * stats.cols + cv.CC_STAT_AREA];
+        const widthComponent = statsData[i * stats.cols + cv.CC_STAT_WIDTH];
+        const heightComponent = statsData[i * stats.cols + cv.CC_STAT_HEIGHT];
+        const left = statsData[i * stats.cols + cv.CC_STAT_LEFT];
+        const top = statsData[i * stats.cols + cv.CC_STAT_TOP];
+        const cx = centroidsData[i * centroids.cols];
+        const cy = centroidsData[i * centroids.cols + 1];
+
+        if (area < minArea || area > maxArea) {
+          continue;
+        }
+        if (heightComponent > spacing * 2.6 || heightComponent < spacing * 0.45) {
+          continue;
+        }
+        if (widthComponent > spacing * 2.6 || widthComponent < spacing * 0.45) {
+          continue;
+        }
+        if (cy < minY || cy > maxY) {
+          continue;
+        }
+        if (left <= 0 || left + widthComponent >= width) {
+          continue;
+        }
+        if (top <= 0 || top + heightComponent >= height) {
+          continue;
+        }
+
+        components.push({
+          area,
+          width: widthComponent,
+          height: heightComponent,
+          x: left,
+          y: top,
+          cx,
+          cy,
+        });
+      }
+    } finally {
+      labels.delete();
+      stats.delete();
+      centroids.delete();
+    }
+
+    return components;
+  }
+
+  function pitchFromOffset(offsetSteps) {
+    const letters = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+    const baseDiatonic = 4 * 7 + 2; // E4
+    let diatonic = baseDiatonic + offsetSteps;
+    let octave = Math.floor(diatonic / 7);
+    let letterIndex = diatonic % 7;
+
+    if (letterIndex < 0) {
+      letterIndex += 7;
+      octave -= 1;
+    }
+
+    const step = letters[letterIndex];
+    return { step, octave };
+  }
+
+  function buildMusicXml(notes, fileName) {
+    const title = sanitiseTitle(fileName);
+    const escapedTitle = escapeXml(title);
+    const workNumber = Date.now().toString();
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    xml += `<!DOCTYPE score-partwise PUBLIC \"-//Recordare//DTD MusicXML 3.1 Partwise//EN\" \"http://www.musicxml.org/dtds/partwise.dtd\">\n`;
+    xml += `<score-partwise version="3.1">\n`;
+    xml += `  <work>\n`;
+    xml += `    <work-number>${workNumber}</work-number>\n`;
+    xml += `    <work-title>${escapedTitle}</work-title>\n`;
+    xml += `  </work>\n`;
+    xml += `  <identification>\n`;
+    xml += `    <encoding>\n`;
+    xml += `      <encoding-date>${new Date().toISOString().split('T')[0]}</encoding-date>\n`;
+    xml += `      <software>Music Scanner (cliente 100 % navegador)</software>\n`;
+    xml += `    </encoding>\n`;
+    xml += `  </identification>\n`;
+    xml += `  <part-list>\n`;
+    xml += `    <score-part id="P1">\n`;
+    xml += `      <part-name>Instrumento</part-name>\n`;
+    xml += `    </score-part>\n`;
+    xml += `  </part-list>\n`;
+    xml += `  <part id="P1">\n`;
+
+    if (!notes.length) {
+      xml += `    <measure number="1">\n`;
+      xml += `      <attributes>\n`;
+      xml += `        <divisions>1</divisions>\n`;
+      xml += `        <key><fifths>0</fifths></key>\n`;
+      xml += `        <time><beats>4</beats><beat-type>4</beat-type></time>\n`;
+      xml += `        <clef><sign>G</sign><line>2</line></clef>\n`;
+      xml += `      </attributes>\n`;
+      xml += `      <note>\n`;
+      xml += `        <rest/>\n`;
+      xml += `        <duration>4</duration>\n`;
+      xml += `        <type>whole</type>\n`;
+      xml += `      </note>\n`;
+      xml += `    </measure>\n`;
+      xml += `  </part>\n`;
+      xml += `</score-partwise>\n`;
+      return xml;
+    }
+
+    let currentIndex = 0;
+    let measureNumber = 1;
+
+    while (currentIndex < notes.length) {
+      const measureNotes = notes.slice(currentIndex, currentIndex + 4);
+      xml += `    <measure number="${measureNumber}">\n`;
+      if (measureNumber === 1) {
+        xml += `      <attributes>\n`;
+        xml += `        <divisions>1</divisions>\n`;
+        xml += `        <key><fifths>0</fifths></key>\n`;
+        xml += `        <time><beats>4</beats><beat-type>4</beat-type></time>\n`;
+        xml += `        <clef><sign>G</sign><line>2</line></clef>\n`;
+        xml += `      </attributes>\n`;
+      }
+
+      measureNotes.forEach((note) => {
+        xml += `      <note>\n`;
+        xml += `        <pitch>\n`;
+        xml += `          <step>${note.pitch.step}</step>\n`;
+        xml += `          <octave>${note.pitch.octave}</octave>\n`;
+        xml += `        </pitch>\n`;
+        xml += `        <duration>1</duration>\n`;
+        xml += `        <type>quarter</type>\n`;
+        xml += `      </note>\n`;
+      });
+
+      xml += `    </measure>\n`;
+      currentIndex += measureNotes.length;
+      measureNumber += 1;
+    }
+
+    xml += `  </part>\n`;
+    xml += `</score-partwise>\n`;
+    return xml;
+  }
+
+  function createOverlayImage(canvas, staffLines, notes, spacing) {
+    try {
+      const overlay = document.createElement('canvas');
+      overlay.width = canvas.width;
+      overlay.height = canvas.height;
+      const ctx = overlay.getContext('2d');
+      ctx.drawImage(canvas, 0, 0);
+
+      ctx.lineWidth = Math.max(2, spacing / 4);
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.9)';
+      staffLines.forEach((y) => {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      });
+
+      ctx.fillStyle = 'rgba(34, 211, 238, 0.85)';
+      notes.forEach((note) => {
+        ctx.beginPath();
+        ctx.arc(note.cx, note.cy, Math.max(4, spacing / 3), 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      return overlay.toDataURL('image/png');
+    } catch (error) {
+      console.warn('No se pudo crear la imagen de depuración.', error);
       return null;
     }
   }
 
-  function isDemoBackendConfigured() {
-    return backendMode === 'demo';
-  }
-
-  function shouldUseDemoBackend() {
-    return backendMode === 'demo' || demoFallbackActive;
-  }
-
-  function trackGeneratedObjectUrl(url) {
-    if (typeof url !== 'string' || !url) {
-      return;
+  function sanitiseTitle(name) {
+    if (typeof name !== 'string' || !name.trim()) {
+      return 'Partitura convertida';
     }
-
-    generatedObjectUrls.add(url);
+    const withoutExtension = name.replace(/\.[^.]+$/, '');
+    const clean = withoutExtension.replace(/[_-]+/g, ' ').replace(/[^\p{L}\p{N}\s]/gu, '').trim();
+    return clean || 'Partitura convertida';
   }
 
-  function activateDemoFallback(reason) {
-    if (!demoFallbackEnabled || backendMode === 'demo') {
-      return;
-    }
-
-    demoFallbackActive = true;
-    updateProcessButtonState();
-
-    if (reason) {
-      updateBackendStatus(reason, 'info');
-      setStatus(reason, 'info');
-    }
+  function createSlug(name) {
+    return sanitiseTitle(name)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .replace(/-{2,}/g, '-')
+      || 'partitura';
   }
 
-  function clearDemoFallback() {
-    if (!demoFallbackActive) {
-      return;
-    }
-
-    demoFallbackActive = false;
-    updateProcessButtonState();
-  }
-
-  function escapeXml(value) {
-    return String(value ?? '')
+  function escapeXml(text) {
+    return String(text)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -238,1110 +775,41 @@
       .replace(/'/g, '&apos;');
   }
 
-  function delay(ms) {
-    return new Promise((resolve) => {
-      window.setTimeout(resolve, ms);
-    });
-  }
-
-  function getBackendUrlFromConfig() {
-    const config = window.OMR_CONFIG ?? {};
-    if (typeof config.apiBaseUrl === 'string') {
-      return config.apiBaseUrl;
-    }
-    if (typeof config.defaultBackendUrl === 'string') {
-      return config.defaultBackendUrl;
-    }
-    if (typeof window.OMR_API_BASE_URL === 'string') {
-      return window.OMR_API_BASE_URL;
-    }
-    return null;
-  }
-
-  function getSameOriginBackendUrl() {
-    const { origin, protocol } = window.location;
-    if (protocol === 'file:' || !origin || origin === 'null') {
-      return null;
-    }
-
-    return normalizeBackendUrl(origin);
-  }
-
-  function getBackendUrlFromStorage() {
-    return safeGetFromStorage(STORAGE_KEYS.backendUrl);
-  }
-
-  function getBackendUrlFromQuery() {
-    const parameterNames = ['backend', 'apiBaseUrl', 'api_base_url'];
-    for (const name of parameterNames) {
-      const value = queryParameters.get(name);
-      if (value) {
-        return value;
-      }
-    }
-    return null;
-  }
-
-  function updateBackendStatus(message, type = 'info') {
-    if (!backendStatusElement) {
-      return;
-    }
-
-    backendStatusElement.textContent = message;
-    backendStatusElement.classList.remove('info', 'error', 'success');
-    backendStatusElement.classList.add(type);
-  }
-
-  function updateProcessButtonState() {
-    if (!processButton) {
-      return;
-    }
-
-    const demoActive = shouldUseDemoBackend();
-    processButton.disabled = !currentBackendUrl && !demoActive;
-    if (!currentBackendUrl && !demoActive) {
-      processButton.title = 'Configura la URL del backend antes de procesar partituras.';
-    } else if (demoActive) {
-      processButton.title = 'Procesarás la partitura en el modo demostración del navegador.';
-    } else {
-      processButton.title = '';
-    }
-  }
-
-  function setBackendUrl(rawUrl, { persist = false, announce = true } = {}) {
-    const normalized = normalizeBackendUrl(rawUrl);
-    if (!normalized) {
-      if (announce) {
-        updateBackendStatus('La URL del backend no es válida. Revisa el formato e inténtalo de nuevo.', 'error');
-      }
-      return false;
-    }
-
-    if (normalized === 'demo') {
-      backendMode = 'demo';
-      currentBackendUrl = null;
-      clearDemoFallback();
-      if (persist) {
-        safeSetInStorage(STORAGE_KEYS.backendUrl, 'demo');
-      }
-
-      if (backendUrlInput) {
-        backendUrlInput.value = 'demo';
-      }
-
-      updateProcessButtonState();
-
-      if (announce) {
-        updateBackendStatus(
-          'Modo demostración activado. El procesamiento se realizará íntegramente en el navegador.',
-          'info',
-        );
-        setStatus('Modo demostración activado. Puedes volver a un backend real cuando quieras.', 'info');
-      }
-
-      return true;
-    }
-
-    backendMode = 'remote';
-    currentBackendUrl = normalized;
-    if (persist) {
-      safeSetInStorage(STORAGE_KEYS.backendUrl, normalized);
-    }
-
-    if (backendUrlInput) {
-      backendUrlInput.value = normalized;
-    }
-
-    clearDemoFallback();
-    updateProcessButtonState();
-
-    if (announce) {
-      updateBackendStatus(`Backend configurado en ${normalized}.`, 'success');
-    }
-
-    return true;
-  }
-
-  async function checkBackendHealth() {
-    if (isDemoBackendConfigured()) {
-      backendReachable = true;
-      updateBackendStatus(
-        'Modo demostración activo. El procesamiento se realizará directamente en tu navegador.',
-        'info',
-      );
-      setStatus('Modo demostración activo. Puedes configurar un backend público cuando lo necesites.', 'info');
-      return true;
-    }
-
-    if (!currentBackendUrl) {
-      backendReachable = demoFallbackActive;
-      if (demoFallbackActive) {
-        updateBackendStatus(
-          'Modo demostración activo. Configura una URL de backend remoto para volver a intentarlo.',
-          'info',
-        );
-      } else {
-        updateBackendStatus('Configura la URL del backend antes de comprobar la conexión.', 'error');
-      }
-      return backendReachable;
-    }
-
-    const requestId = ++backendHealthRequestId;
-    updateBackendStatus('Comprobando la disponibilidad del backend…', 'info');
-
-    try {
-      const response = await fetch(`${currentBackendUrl}/api/health`, {
-        method: 'GET',
-        cache: 'no-store',
-      });
-
-      let payload = null;
-      try {
-        payload = await response.json();
-      } catch (error) {
-        // Ignoramos errores al interpretar JSON para mostrar un mensaje genérico.
-      }
-
-      if (requestId !== backendHealthRequestId) {
-        return backendReachable;
-      }
-
-      if (response.ok && payload && payload.status === 'ok') {
-        backendReachable = true;
-        clearDemoFallback();
-        updateBackendStatus(`Backend operativo (${currentBackendUrl}).`, 'success');
-        return true;
-      }
-
-      const detailMessage =
-        (payload && (payload.message || payload.detail)) ||
-        `Respuesta inesperada del backend (código ${response.status}).`;
-      throw new Error(detailMessage);
-    } catch (error) {
-      if (requestId !== backendHealthRequestId) {
-        return backendReachable;
-      }
-
-      backendReachable = false;
-      const baseMessage = `No se pudo contactar con el backend: ${error.message || 'Error desconocido.'}`;
-      updateBackendStatus(baseMessage, 'error');
-      if (demoFallbackEnabled) {
-        const demoMessage = `${baseMessage} Se activó el modo demostración en el navegador para que puedas continuar probando la interfaz.`;
-        activateDemoFallback(demoMessage);
-      }
-      return shouldUseDemoBackend();
-    }
-  }
-
-  function initializeBackendConfiguration() {
-    const queryBackend = normalizeBackendUrl(getBackendUrlFromQuery());
-    const storedBackend = normalizeBackendUrl(getBackendUrlFromStorage());
-    const configuredBackend = normalizeBackendUrl(getBackendUrlFromConfig());
-    const fallbackBackend = getSameOriginBackendUrl();
-
-    if (queryBackend && setBackendUrl(queryBackend, { persist: true, announce: false })) {
-      updateBackendStatus(
-        'URL del backend tomada de los parámetros del enlace. Verificando disponibilidad…',
-        'info',
-      );
-    } else if (storedBackend && setBackendUrl(storedBackend, { announce: false })) {
-      updateBackendStatus('Usando la última URL del backend guardada en este navegador.', 'info');
-    } else if (configuredBackend && setBackendUrl(configuredBackend, { announce: false })) {
-      updateBackendStatus('Usando la URL del backend definida en config.js.', 'info');
-    } else if (fallbackBackend && setBackendUrl(fallbackBackend, { announce: false })) {
-      updateBackendStatus('Usando el mismo origen de la página como backend.', 'info');
-    } else {
-      setBackendUrl('demo', { announce: false });
-      updateBackendStatus(
-        'No se encontró un backend configurado. Se activó el modo demostración en el navegador.',
-        'info',
-      );
-      setStatus('Modo demostración activo. Configura un backend público cuando quieras procesar de forma real.', 'info');
-    }
-
-    if (currentBackendUrl || isDemoBackendConfigured()) {
-      void checkBackendHealth();
-    }
-  }
-
-  function handleApplyBackendUrl() {
-    if (!backendUrlInput) {
-      return;
-    }
-
-    const rawUrl = backendUrlInput.value;
-    if (!rawUrl || !rawUrl.trim()) {
-      updateBackendStatus('Introduce una URL antes de aplicar los cambios.', 'error');
-      return;
-    }
-
-    if (setBackendUrl(rawUrl, { persist: true })) {
-      void checkBackendHealth();
-    }
-  }
-
-  function handleResetBackendUrl() {
-    safeRemoveFromStorage(STORAGE_KEYS.backendUrl);
-
-    const configuredBackend = normalizeBackendUrl(getBackendUrlFromConfig());
-    const fallbackBackend = getSameOriginBackendUrl();
-
-    if (configuredBackend && setBackendUrl(configuredBackend, { announce: false })) {
-      updateBackendStatus('Se restableció la URL definida en config.js.', 'info');
-      void checkBackendHealth();
-      return;
-    }
-
-    if (fallbackBackend && setBackendUrl(fallbackBackend, { announce: false })) {
-      updateBackendStatus('Se restableció la URL del mismo origen.', 'info');
-      void checkBackendHealth();
-      return;
-    }
-
-    setBackendUrl('demo', { announce: false, persist: true });
-    updateBackendStatus(
-      'Se restableció el modo demostración para seguir utilizando la aplicación sin backend.',
-      'info',
-    );
-    setStatus('Modo demostración activo tras restablecer la configuración.', 'info');
-  }
-
-  const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
-  const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'pdf'];
-  const FALLBACK_PROCESSING_MODES = [
-    { value: 'auto', label: 'Automático' },
-    { value: 'printed', label: 'Impreso' },
-    { value: 'handwritten', label: 'Manuscrito' },
-  ];
-
-  function sanitizeProcessingModes(rawModes) {
-    if (!Array.isArray(rawModes)) {
-      return [];
-    }
-
-    return rawModes
-      .map((mode) => {
-        if (!mode || typeof mode !== 'object') {
-          return null;
-        }
-
-        const value = String(mode.value ?? '').trim();
-        if (!value) {
-          return null;
-        }
-
-        const label = String(mode.label ?? '').trim() || value;
-        return { value: value.toLowerCase(), label };
-      })
-      .filter(Boolean);
-  }
-
-  const configuredProcessingModes = sanitizeProcessingModes(window.OMR_PROCESSING_MODES);
-  const processingModes = configuredProcessingModes.length
-    ? configuredProcessingModes
-    : FALLBACK_PROCESSING_MODES;
-  const processingModeMap = new Map(
-    processingModes.map((mode) => [mode.value.toLowerCase(), mode.label]),
-  );
-  const defaultProcessingMode =
-    (processingModeMap.has('auto') && 'auto') || processingModes[0]?.value || 'auto';
-
-  function describeProcessingMode(mode) {
-    if (!mode) {
-      return '';
-    }
-
-    const normalized = String(mode).toLowerCase();
-    return processingModeMap.get(normalized) || mode;
-  }
-
-  function populateProcessingModeOptions() {
-    if (!processingModeSelect) {
-      return;
-    }
-
-    processingModeSelect.innerHTML = '';
-    processingModes.forEach((mode) => {
-      const option = document.createElement('option');
-      option.value = mode.value;
-      option.textContent = mode.label;
-      processingModeSelect.appendChild(option);
-    });
-
-    if (processingModeMap.has(defaultProcessingMode)) {
-      processingModeSelect.value = defaultProcessingMode;
-    } else if (processingModes.length > 0) {
-      processingModeSelect.value = processingModes[0].value;
-    }
-  }
-
-  function sanitizeCliArguments(argumentsArray) {
-    if (Array.isArray(argumentsArray)) {
-      return argumentsArray
-        .map((arg) => String(arg ?? '').trim())
-        .filter((arg) => arg.length > 0);
-    }
-
-    if (typeof argumentsArray === 'string') {
-      return argumentsArray
-        .split(/\s+/)
-        .map((arg) => arg.trim())
-        .filter((arg) => arg.length > 0);
-    }
-
-    return [];
-  }
-
-  function formatCliArguments(argumentsArray) {
-    const sanitized = sanitizeCliArguments(argumentsArray);
-    return sanitized.join(' ');
-  }
-
-  function resetResults() {
-    resultsContainer.innerHTML = '<p class="placeholder">Aquí aparecerá el enlace para descargar el MusicXML.</p>';
-  }
-
-  function setPreviewStatus(message, type = 'info') {
-    if (!previewStatusElement) {
-      return;
-    }
-
-    previewStatusElement.textContent = message;
-    previewStatusElement.classList.remove('info', 'error', 'success');
-    previewStatusElement.classList.add(type);
-  }
-
-  function showPreviewPlaceholder(text) {
-    if (!previewContentElement) {
-      return;
-    }
-
-    previewContentElement.innerHTML = `<p class="placeholder">${text}</p>`;
-  }
-
-  function resetPreview() {
-    if (!previewContentElement || !previewStatusElement) {
-      return;
-    }
-
-    setPreviewStatus(
-      'La previsualización aparecerá aquí cuando haya un resultado disponible.',
-      'info',
-    );
-    showPreviewPlaceholder('Todavía no hay ninguna previsualización disponible.');
-  }
-
-  function preparePreviewForProcessing() {
-    if (!previewContentElement || !previewStatusElement) {
-      return;
-    }
-
-    setPreviewStatus('La previsualización se actualizará cuando finalice la conversión.', 'info');
-    showPreviewPlaceholder('Generando previsualización…');
-  }
-
-  async function ensureVerovioToolkit() {
-    if (verovioToolkitInstance) {
-      return verovioToolkitInstance;
-    }
-
-    if (verovioToolkitError) {
-      return null;
-    }
-
-    if (verovioToolkitPromise) {
-      return verovioToolkitPromise;
-    }
-
-    if (!window.verovio || typeof window.verovio.toolkit !== 'function') {
-      console.warn('La librería Verovio no está disponible en la página.');
-      verovioToolkitError = true;
-      return null;
-    }
-
-    verovioToolkitPromise = Promise.resolve()
-      .then(() => new window.verovio.toolkit())
-      .then((toolkit) => {
-        verovioToolkitInstance = toolkit;
-        return toolkit;
-      })
-      .catch((error) => {
-        console.error('No se pudo inicializar el visor Verovio.', error);
-        verovioToolkitError = true;
-        return null;
-      })
-      .finally(() => {
-        verovioToolkitPromise = null;
-      });
-
-    return verovioToolkitPromise;
-  }
-
-  function describePage(pageNumber, totalPages) {
-    if (!pageNumber) {
-      return '';
-    }
-
-    if (totalPages) {
-      return `Página ${pageNumber} de ${totalPages}`;
-    }
-
-    return `Página ${pageNumber}`;
-  }
-
-  function renderLatestResult(
-    url,
-    originalFilename,
-    resultId,
-    pageNumber,
-    totalPages,
-    processingMode,
-    appliedArguments,
-  ) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'download-result';
-
-    const info = document.createElement('p');
-    info.className = 'download-info';
-    info.textContent = originalFilename
-      ? `Resultado para “${originalFilename}”`
-      : 'Resultado disponible para su descarga';
-
-    const link = document.createElement('a');
-    link.className = 'download-link';
-    link.href = url;
-    link.textContent = 'Descargar MusicXML';
-    link.target = '_blank';
-    link.rel = 'noopener';
-
-    const pageInfo = describePage(pageNumber, totalPages);
-    const identifier = document.createElement('p');
-    identifier.className = 'download-id';
-    identifier.textContent = resultId ? `ID de referencia: ${resultId}` : '';
-
-    wrapper.appendChild(info);
-    wrapper.appendChild(link);
-
-    if (pageInfo) {
-      const pageParagraph = document.createElement('p');
-      pageParagraph.className = 'download-page-info';
-      pageParagraph.textContent = pageInfo;
-      wrapper.appendChild(pageParagraph);
-    }
-
-    const modeLabel = describeProcessingMode(processingMode);
-    if (modeLabel) {
-      const modeParagraph = document.createElement('p');
-      modeParagraph.className = 'download-processing-mode';
-      modeParagraph.textContent = `Modo de reconocimiento: ${modeLabel}.`;
-      wrapper.appendChild(modeParagraph);
-    }
-
-    const cliArgumentsText = formatCliArguments(appliedArguments);
-    if (cliArgumentsText) {
-      const extraParagraph = document.createElement('p');
-      extraParagraph.className = 'download-extra-options';
-      extraParagraph.textContent = `Parámetros adicionales: ${cliArgumentsText}`;
-      wrapper.appendChild(extraParagraph);
-    }
-
-    if (resultId) {
-      wrapper.appendChild(identifier);
-    }
-
-    resultsContainer.innerHTML = '';
-    resultsContainer.appendChild(wrapper);
-  }
-
-  function renderHistory() {
-    if (!historyContainer) {
-      return;
-    }
-
-    historyContainer.innerHTML = '';
-
-    if (conversions.length === 0) {
-      historyContainer.innerHTML =
-        '<p class="placeholder">Todavía no has procesado ninguna partitura.</p>';
-      return;
-    }
-
-    const list = document.createElement('ol');
-    list.className = 'history-list';
-
-    const reversed = [...conversions].reverse();
-
-    reversed.forEach((conversion) => {
-      const item = document.createElement('li');
-      item.className = 'history-item';
-
-      const title = document.createElement('p');
-      title.className = 'history-title';
-      title.textContent = conversion.originalFilename
-        ? `“${conversion.originalFilename}”`
-        : 'Conversión sin nombre';
-
-      const actions = document.createElement('div');
-      actions.className = 'history-actions';
-
-      const link = document.createElement('a');
-      link.className = 'history-link';
-      link.href = conversion.url;
-      link.textContent = 'Descargar';
-      link.target = '_blank';
-      link.rel = 'noopener';
-
-      const metadata = document.createElement('p');
-      metadata.className = 'history-meta';
-      const timestamp = historyDateFormatter.format(conversion.completedAt);
-      const metadataParts = [];
-      if (conversion.resultId) {
-        metadataParts.push(`ID: ${conversion.resultId}`);
-      }
-      const pageInfo = describePage(conversion.pageNumber, conversion.totalPages);
-      if (pageInfo) {
-        metadataParts.push(pageInfo);
-      }
-      const modeLabel = describeProcessingMode(conversion.processingMode);
-      if (modeLabel) {
-        metadataParts.push(`Modo: ${modeLabel}`);
-      }
-      metadataParts.push(timestamp);
-      metadata.textContent = metadataParts.join(' · ');
-
-      actions.appendChild(link);
-
-      item.appendChild(title);
-      item.appendChild(metadata);
-      const cliArgumentsText = formatCliArguments(conversion.appliedArguments);
-      if (cliArgumentsText) {
-        const advanced = document.createElement('p');
-        advanced.className = 'history-advanced';
-        advanced.textContent = `Parámetros adicionales: ${cliArgumentsText}`;
-        item.appendChild(advanced);
-      }
-      item.appendChild(actions);
-
-      list.appendChild(item);
-    });
-
-    historyContainer.appendChild(list);
-  }
-
-  function registerConversion(payload) {
-    const conversion = {
-      url: payload.musicxml_url,
-      originalFilename: payload.original_filename || '',
-      resultId: payload.result_id || '',
-      pageNumber: payload.page_number ?? null,
-      totalPages: payload.total_pages ?? null,
-      processingMode: payload.processing_mode || defaultProcessingMode,
-      appliedArguments: sanitizeCliArguments(payload.applied_cli_arguments),
-      completedAt: new Date(),
-    };
-
-    conversions.push(conversion);
-    renderLatestResult(
-      conversion.url,
-      conversion.originalFilename,
-      conversion.resultId,
-      conversion.pageNumber,
-      conversion.totalPages,
-      conversion.processingMode,
-      conversion.appliedArguments,
-    );
-    renderHistory();
-    void renderPreview(conversion);
-  }
-
-  async function renderPreview(conversion) {
-    if (!conversion || !previewContentElement || !previewStatusElement) {
-      return;
-    }
-
-    setPreviewStatus('Generando previsualización del MusicXML…', 'info');
-    showPreviewPlaceholder('Cargando MusicXML para mostrar la partitura.');
-
-    const toolkit = await ensureVerovioToolkit();
-    if (!toolkit) {
-      setPreviewStatus(
-        'El visor integrado no está disponible en este navegador. Descarga el MusicXML para revisarlo manualmente.',
-        'error',
-      );
-      showPreviewPlaceholder('Descarga el MusicXML para revisarlo en tu editor preferido.');
-      return;
-    }
-
-    try {
-      const response = await fetch(conversion.url, { cache: 'no-store' });
-      if (!response.ok) {
-        throw new Error(`No se pudo cargar el MusicXML (código ${response.status}).`);
-      }
-
-      const musicXml = await response.text();
-
-      toolkit.setOptions({
-        adjustPageHeight: true,
-        svgViewBox: true,
-        footer: 'none',
-        header: 'none',
-        scale: 35,
-        pageWidth: 2100,
-        pageHeight: 2970,
-        ignoreLayout: 1,
-      });
-
-      toolkit.loadData(musicXml, {});
-      const totalPages = toolkit.getPageCount();
-      const svg = toolkit.renderToSVG(1, {});
-
-      previewContentElement.innerHTML = svg;
-
-      const messageParts = ['Previsualización generada correctamente.'];
-      if (Number.isInteger(totalPages) && totalPages > 1) {
-        messageParts.push(`Mostrando la página 1 de ${totalPages}.`);
-      }
-      if (conversion.originalFilename) {
-        messageParts.push(`Archivo: “${conversion.originalFilename}”.`);
-      }
-      const modeLabel = describeProcessingMode(conversion.processingMode);
-      if (modeLabel) {
-        messageParts.push(`Modo: ${modeLabel}.`);
-      }
-
-      setPreviewStatus(messageParts.join(' '), 'success');
-    } catch (error) {
-      console.error('No se pudo renderizar la previsualización.', error);
-      setPreviewStatus(
-        'No se pudo generar la previsualización. Descarga el MusicXML para revisarlo manualmente.',
-        'error',
-      );
-      showPreviewPlaceholder('Descarga el MusicXML para revisarlo en tu editor preferido.');
-    }
-  }
-
-  function showPdfOptions() {
-    if (!pdfOptions) {
-      return;
-    }
-
-    pdfOptions.classList.remove('hidden');
-    if (pageInput) {
-      const parsed = Number.parseInt(pageInput.value, 10);
-      if (!Number.isInteger(parsed) || parsed < 1) {
-        pageInput.value = '1';
-      }
-    }
-
-    updatePdfDetails();
-  }
-
-  function hidePdfOptions() {
-    currentPdfPageCount = null;
-
-    if (pdfOptions) {
-      pdfOptions.classList.add('hidden');
-    }
-
-    if (pageInput) {
-      pageInput.value = '1';
-      pageInput.removeAttribute('max');
-    }
-
-    if (pageDetails) {
-      pageDetails.textContent = 'Procesará la página 1.';
-    }
-  }
-
-  function updatePdfDetails() {
-    if (!pageInput || !pageDetails) {
-      return;
-    }
-
-    const parsed = Number.parseInt(pageInput.value, 10) || 1;
-    const description = describePage(parsed, currentPdfPageCount);
-    pageDetails.textContent = description || `Procesará la página ${parsed}.`;
-  }
-
-  function handlePageInputChange() {
-    if (!pageInput) {
-      return;
-    }
-
-    let parsed = Number.parseInt(pageInput.value, 10);
-    if (!Number.isInteger(parsed) || parsed < 1) {
-      parsed = 1;
-    } else if (currentPdfPageCount && parsed > currentPdfPageCount) {
-      parsed = currentPdfPageCount;
-    }
-
-    pageInput.value = String(parsed);
-    updatePdfDetails();
-  }
-
-  async function updatePdfPageCount(file) {
-    if (!pageInput) {
-      currentPdfPageCount = null;
-      return;
-    }
-
-    if (!window.pdfjsLib || typeof window.pdfjsLib.getDocument !== 'function') {
-      currentPdfPageCount = null;
-      pageInput.removeAttribute('max');
-      updatePdfDetails();
-      return;
-    }
-
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      const numPages = Number.parseInt(pdf?.numPages, 10);
-      currentPdfPageCount = Number.isInteger(numPages) && numPages > 0 ? numPages : null;
-    } catch (error) {
-      console.warn('No se pudo determinar la cantidad de páginas del PDF.', error);
-      currentPdfPageCount = null;
-    }
-
-    if (pageInput) {
-      if (currentPdfPageCount) {
-        pageInput.max = String(currentPdfPageCount);
-        const currentValue = Number.parseInt(pageInput.value, 10);
-        if (Number.isInteger(currentValue) && currentValue > currentPdfPageCount) {
-          pageInput.value = String(currentPdfPageCount);
-        }
-      } else {
-        pageInput.removeAttribute('max');
-      }
-    }
-
-    updatePdfDetails();
-  }
-
-  async function handleFileChange() {
-    const file = fileInput?.files?.[0];
-
-    if (!file) {
-      hidePdfOptions();
-      return;
-    }
-
-    const extension = file.name.split('.').pop()?.toLowerCase();
-    if (extension === 'pdf') {
-      showPdfOptions();
-      await updatePdfPageCount(file);
-    } else {
-      hidePdfOptions();
-    }
-  }
-
-  function extractErrorMessage(payload, fallback = 'No se pudo procesar la partitura.') {
-    if (!payload || typeof payload !== 'object') {
-      return fallback;
-    }
-
-    if (typeof payload.message === 'string' && payload.message.trim()) {
-      return payload.message;
-    }
-
-    if (typeof payload.detail === 'string' && payload.detail.trim()) {
-      return payload.detail;
-    }
-
-    if (Array.isArray(payload.errors) && payload.errors.length > 0) {
-      const details = payload.errors
-        .map((error) => error?.msg)
-        .filter(Boolean)
-        .join('; ');
-      if (details) {
-        return details;
-      }
-    }
-
-    return fallback;
-  }
-
-  function generateDemoMusicXml({
-    filename,
-    pageNumber,
-    totalPages,
-    processingMode,
-    advancedArgs,
-    fileSize,
-    createdAt,
-  }) {
-    const safeFilename = escapeXml(filename || 'Archivo sin nombre');
-    const safeTitle = escapeXml(filename ? `Demo OMR – ${filename}` : 'Demo OMR');
-    const pageInfo = describePage(pageNumber, totalPages) || 'Sin información de página';
-    const safePageInfo = escapeXml(pageInfo);
-    const safeMode = escapeXml((processingMode || defaultProcessingMode || 'auto').toLowerCase());
-    const advancedText = Array.isArray(advancedArgs) && advancedArgs.length
-      ? advancedArgs.join(' ')
-      : 'Sin parámetros adicionales';
-    const safeAdvancedText = escapeXml(advancedText);
-    const safeCreatedAt = escapeXml(createdAt || new Date().toISOString());
-    const safeFileSize = escapeXml(Number.isFinite(fileSize) ? String(fileSize) : 'desconocido');
-
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
-<score-partwise version="3.1">
-  <work>
-    <work-title>${safeTitle}</work-title>
-  </work>
-  <identification>
-    <creator type="composer">Music Scanner (modo demostración)</creator>
-    <encoding>
-      <software>Music Scanner – Demo sin backend</software>
-      <encoding-date>${safeCreatedAt}</encoding-date>
-    </encoding>
-    <miscellaneous>
-      <miscellaneous-field name="original-filename">${safeFilename}</miscellaneous-field>
-      <miscellaneous-field name="page-information">${safePageInfo}</miscellaneous-field>
-      <miscellaneous-field name="processing-mode">${safeMode}</miscellaneous-field>
-      <miscellaneous-field name="advanced-arguments">${safeAdvancedText}</miscellaneous-field>
-      <miscellaneous-field name="file-size-bytes">${safeFileSize}</miscellaneous-field>
-    </miscellaneous>
-  </identification>
-  <part-list>
-    <score-part id="P1">
-      <part-name>Demo</part-name>
-    </score-part>
-  </part-list>
-  <part id="P1">
-    <measure number="1">
-      <attributes>
-        <divisions>1</divisions>
-        <key>
-          <fifths>0</fifths>
-        </key>
-        <time>
-          <beats>4</beats>
-          <beat-type>4</beat-type>
-        </time>
-        <clef>
-          <sign>G</sign>
-          <line>2</line>
-        </clef>
-      </attributes>
-      <note>
-        <pitch>
-          <step>C</step>
-          <octave>4</octave>
-        </pitch>
-        <duration>4</duration>
-        <type>whole</type>
-      </note>
-      <direction placement="below">
-        <direction-type>
-          <words>Resultado de demostración generado directamente en tu navegador.</words>
-        </direction-type>
-      </direction>
-    </measure>
-  </part>
-</score-partwise>`;
-  }
-
-  async function processWithDemoBackend(file, pageNumber, selectedMode, advancedArguments) {
-    const modeToUse = (selectedMode || defaultProcessingMode || 'auto').toLowerCase();
-    const sanitizedArguments = sanitizeCliArguments(advancedArguments);
-    backendReachable = true;
-
-    updateBackendStatus(
-      'Modo demostración: generando un MusicXML ficticio en tu navegador.',
-      'info',
-    );
-    setStatus('Procesando la partitura en el modo demostración…', 'info');
-
-    await delay(800);
-
-    const now = new Date();
-    const musicXml = generateDemoMusicXml({
-      filename: file?.name || 'Archivo sin nombre',
-      pageNumber,
-      totalPages: currentPdfPageCount,
-      processingMode: modeToUse,
-      advancedArgs: sanitizedArguments,
-      fileSize: file?.size ?? null,
-      createdAt: now.toISOString(),
-    });
-
-    const blob = new Blob([musicXml], {
-      type: 'application/vnd.recordare.musicxml+xml',
-    });
-    const objectUrl = URL.createObjectURL(blob);
-    trackGeneratedObjectUrl(objectUrl);
-
-    const payload = {
-      status: 'ok',
-      musicxml_url: objectUrl,
-      original_filename: file?.name || '',
-      result_id: `demo-${now.getTime()}`,
-      page_number: pageNumber ?? null,
-      total_pages: currentPdfPageCount,
-      processing_mode: modeToUse,
-      applied_cli_arguments: sanitizedArguments,
-    };
-
-    registerConversion(payload);
-    setStatus('Conversión de demostración completada. Descarga disponible.', 'success');
-    updateBackendStatus('Modo demostración activo. El resultado se generó en tu navegador.', 'success');
-  }
-
-  async function sendFile(file, pageNumber) {
-    const selectedMode = (processingModeSelect?.value || defaultProcessingMode).trim();
-    const advancedOptionsRaw = advancedParamsInput?.value ?? '';
-    const sanitizedAdvancedArguments = sanitizeCliArguments(advancedOptionsRaw);
-
-    resetResults();
-    preparePreviewForProcessing();
-
-    if (shouldUseDemoBackend()) {
-      await processWithDemoBackend(file, pageNumber, selectedMode, sanitizedAdvancedArguments);
-      return;
-    }
-
-    if (!currentBackendUrl) {
-      setStatus('Configura la URL del backend antes de procesar partituras.', 'error');
-      updateBackendStatus('Configura la URL del backend antes de procesar partituras.', 'error');
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-    if (selectedMode) {
-      formData.append('processing_mode', selectedMode);
-    }
-    const advancedOptions = advancedOptionsRaw.trim();
-    if (advancedOptions) {
-      formData.append('advanced_options', advancedOptions);
-    }
-    if (typeof pageNumber === 'number' && Number.isFinite(pageNumber)) {
-      formData.append('page', String(pageNumber));
-    }
-
-    setStatus('Enviando archivo al backend…');
-    updateBackendStatus('Enviando archivo al backend…', 'info');
-
-    try {
-      const response = await fetch(`${currentBackendUrl}/api/omr`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      setStatus('Procesando respuesta del backend…');
-
-      let payload = null;
-      try {
-        payload = await response.json();
-      } catch (parseError) {
-        console.warn('No se pudo interpretar la respuesta del backend como JSON.', parseError);
-      }
-
-      if (!response.ok) {
-        const message = extractErrorMessage(
-          payload,
-          `No se pudo procesar la partitura (código ${response.status}).`,
-        );
-        throw new Error(message);
-      }
-
-      if (!payload) {
-        throw new Error('La respuesta del backend no tiene el formato esperado.');
-      }
-
-      if (payload.status && payload.status !== 'ok') {
-        const message = extractErrorMessage(payload);
-        throw new Error(message);
-      }
-
-      if (!payload.musicxml_url) {
-        throw new Error('La respuesta del backend no incluye el enlace de descarga.');
-      }
-
-      registerConversion(payload);
-      setStatus('Conversión completada. Descarga disponible.', 'success');
-      updateBackendStatus('El backend respondió correctamente a la solicitud.', 'success');
-    } catch (error) {
-      console.error(error);
-      setStatus(error.message || 'Error inesperado al contactar con el backend.', 'error');
-      updateBackendStatus(error.message || 'Error inesperado al contactar con el backend.', 'error');
-      resetResults();
-      setPreviewStatus('No se pudo generar la previsualización para esta conversión.', 'error');
-      showPreviewPlaceholder('Descarga el MusicXML para revisarlo manualmente.');
-    }
-  }
-
-  function handleProcessClick() {
-    const file = fileInput.files?.[0];
-
-    if (!file) {
-      setStatus('Selecciona un archivo antes de procesar.', 'error');
-      resetResults();
-      return;
-    }
-
-    const fileExtension = file.name.split('.').pop()?.toLowerCase();
-    if (!fileExtension || !ALLOWED_EXTENSIONS.includes(fileExtension)) {
-      setStatus('Formato no soportado. Usa PNG, JPG, JPEG o PDF.', 'error');
-      resetResults();
-      return;
-    }
-
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      setStatus('El archivo supera el tamaño máximo permitido (10 MB).', 'error');
-      resetResults();
-      return;
-    }
-
-    let pageNumberToSend = null;
-    if (fileExtension === 'pdf') {
-      const parsed = Number.parseInt(pageInput?.value ?? '1', 10);
-      if (!Number.isInteger(parsed) || parsed < 1) {
-        setStatus('Selecciona una página válida (número entero mayor o igual a 1).', 'error');
-        resetResults();
-        return;
-      }
-
-      if (currentPdfPageCount && parsed > currentPdfPageCount) {
-        setStatus(
-          `La página seleccionada supera las ${currentPdfPageCount} páginas disponibles en el PDF.`,
-          'error',
-        );
-        resetResults();
-        return;
-      }
-
-      pageNumberToSend = parsed;
-    }
-
-    setStatus('Preparando archivo para enviar…');
-    void sendFile(file, pageNumberToSend);
-  }
-
-  if (!enforceAllowedFrontendLocation()) {
-    return;
-  }
-
-  populateProcessingModeOptions();
-  initializeBackendConfiguration();
-
-  backendApplyButton?.addEventListener('click', handleApplyBackendUrl);
-  backendResetButton?.addEventListener('click', handleResetBackendUrl);
-  backendCheckButton?.addEventListener('click', () => {
-    void checkBackendHealth();
+  dropZone.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    dropZone.classList.add('dragover');
   });
-  backendUrlInput?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') {
+
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('dragover');
+  });
+
+  dropZone.addEventListener('drop', (event) => {
+    event.preventDefault();
+    dropZone.classList.remove('dragover');
+    const file = event.dataTransfer?.files?.[0];
+    if (file) {
+      handleSelectedFile(file);
+    }
+  });
+
+  dropZone.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      handleApplyBackendUrl();
+      fileInput.click();
     }
   });
 
-  fileInput?.addEventListener('change', () => {
-    void handleFileChange();
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (file) {
+      handleSelectedFile(file);
+    }
   });
 
-  pageInput?.addEventListener('input', handlePageInputChange);
-  processButton?.addEventListener('click', handleProcessClick);
+  processButton.addEventListener('click', () => {
+    processCurrentScore();
+  });
 
-  resetPreview();
+  resetResults();
 })();

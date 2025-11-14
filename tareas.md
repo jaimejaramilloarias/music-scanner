@@ -1,43 +1,18 @@
-# Tareas para el desarrollo progresivo
+# Hoja de ruta actualizada – Music Scanner solo navegador
 
-## Fase 0 – Preparación del repositorio
-- [ ] Crear el repositorio en GitHub y activar GitHub Pages apuntando a `docs/`.
-- [ ] Confirmar que la página inicial se sirve correctamente desde GitHub Pages.
+## Objetivos completados
+- [x] Sustituir el backend por un flujo de procesamiento 100 % en el navegador con OpenCV.js.
+- [x] Rediseñar la interfaz para GitHub Pages incluyendo historial, vista previa y visualización de detecciones.
+- [x] Documentar el nuevo funcionamiento en el README y simplificar los requisitos de despliegue.
 
-## Fase 1 – Estructura básica del proyecto
-- [x] Crear las carpetas `docs/` y `backend/` con la estructura mínima descrita en `AGENTS.md`.
-- [x] Añadir los archivos base del frontend (`index.html`, `style.css`, `app.js`, `config.js`).
-- [x] Inicializar el esqueleto del backend con FastAPI y un endpoint de salud.
+## Próximos pasos sugeridos
+- [ ] Mejorar la detección de ritmos incorporando análisis de duraciones y silencios.
+- [ ] Añadir soporte para múltiples pentagramas y claves diferentes.
+- [ ] Crear un conjunto de imágenes de prueba y automatizar comparaciones del MusicXML generado.
+- [ ] Traducir la interfaz al inglés mediante i18n sencillo.
+- [ ] Documentar recetas para ajustar los parámetros de OpenCV según la calidad del escaneo.
 
-## Fase 2 – Backend mínimo + endpoint de salud
-- [x] Completar la configuración de CORS con los dominios definitivos de GitHub Pages.
-- [x] Probar localmente `uvicorn main:app --reload` y verificar `GET /api/health`.
-
-## Fase 3 – Subida de archivo desde el frontend
-- [x] Implementar en `app.js` el envío real del archivo mediante `fetch`.
-- [x] Añadir en el backend el manejo del archivo recibido y responder con datos de prueba.
-- [x] Validar el flujo completo entre GitHub Pages y el backend en ejecución.
-
-## Fase 4 – Integración con Audiveris (MusicXML)
-- [x] Implementar `run_omr` en `backend/app/services` para invocar Audiveris.
-- [x] Actualizar `POST /api/omr` para devolver la URL del MusicXML.
-- [x] Crear el endpoint de descarga de archivos MusicXML.
-
-## Fase 5 – Mostrar enlace de descarga en el frontend
-- [x] Mostrar el enlace de descarga en `docs/app.js` cuando el backend responda con éxito.
-- [x] Ajustar los mensajes de estado para reflejar el progreso del procesamiento.
-
-## Fase 6 – Manejo de errores y validaciones
-- [x] Implementar validaciones de tamaño y tipo de archivo tanto en frontend como en backend.
-- [x] Normalizar las respuestas de error y mostrarlas en la interfaz.
-
-## Fase 7 – Limpieza, estilos y documentación
-- [x] Mejorar los estilos en `docs/style.css` para estados “ok” y “error”.
-- [x] Documentar la configuración y despliegue en `README.md`.
-- [x] Organizar módulos y añadir documentación en el backend.
-
-## Extensiones futuras (opcionales)
-- [x] Soporte para PDFs multipágina.
-- [x] Historial de conversiones por sesión.
-- [x] Previsualización del MusicXML en el navegador.
-- [x] Configuración dinámica del backend desde la interfaz con verificación de salud.
+## Ideas a largo plazo
+- [ ] Integrar un modelo ML ligero (TensorFlow.js) para clasificar símbolos complejos.
+- [ ] Permitir exportar también en formato MIDI a partir del MusicXML generado.
+- [ ] Implementar edición manual de notas detectadas directamente en la página.

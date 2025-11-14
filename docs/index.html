@@ -3,129 +3,113 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Conversor OMR a MusicXML</title>
+    <title>Music Scanner – OMR 100 % en el navegador</title>
     <link
       rel="icon"
       type="image/svg+xml"
-      href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2064%2064%27%3E%0A%20%20%3Crect%20fill%3D%27%231b1f3b%27%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2712%27/%3E%0A%20%20%3Cpath%20fill%3D%27%23f9d342%27%20d%3D%27M28%2012h20v26.5c0%205.5-4.5%2010-10%2010-4.1%200-7.7-2.4-9.3-5.9-.4-.9.3-1.9%201.3-1.9%201.1%200%202%20.7%202.5%201.7%201%202.2%203.2%203.7%205.5%203.7%203.3%200%206-2.7%206-6V18h-12v23.5c0%205.5-4.5%2010-10%2010-4.1%200-7.7-2.4-9.3-5.9-.4-.9.3-1.9%201.3-1.9%201.1%200%202%20.7%202.5%201.7%201%202.2%203.2%203.7%205.5%203.7%203.3%200%206-2.7%206-6z%27/%3E%0A%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2712%27%20fill%3D%27%230b1120%27/%3E%3Cpath%20fill%3D%27%23facc15%27%20d%3D%27M22%2012h22v28c0%205.5-4.5%2010-10%2010-3.7%200-6.9-2-8.6-4.9-.6-1.1.2-2.4%201.5-2.4.7%200%201.4.4%201.7%201%201.1%202.2%203.1%203.7%205.4%203.7%203.3%200%206-2.7%206-6V18H28v24c0%205.5-4.5%2010-10%2010-3.7%200-6.9-2-8.6-4.9-.6-1.1.2-2.4%201.5-2.4.7%200%201.4.4%201.7%201%201.1%202.2%203.1%203.7%205.4%203.7%203.3%200%206-2.7%206-6z%27/%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="style.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.2.67/pdf.min.js" defer></script>
-    <script src="https://www.verovio.org/javascript/latest/verovio-toolkit.js" defer></script>
-    <script src="config.js" defer></script>
+    <script>
+      window.Module = {
+        onRuntimeInitialized() {
+          window.dispatchEvent(new Event('opencv-ready'));
+        },
+      };
+    </script>
+    <script
+      src="https://docs.opencv.org/4.x/opencv.js"
+      defer
+      onload="window.dispatchEvent(new Event('opencv-script-loaded'))"
+      onerror="window.dispatchEvent(new CustomEvent('opencv-error', { detail: new Error('No se pudo cargar OpenCV.js') }))"
+    ></script>
+    <script
+      src="https://www.verovio.org/javascript/latest/verovio-toolkit.js"
+      defer
+      onload="window.dispatchEvent(new Event('verovio-ready'))"
+      onerror="window.dispatchEvent(new CustomEvent('verovio-error', { detail: new Error('No se pudo cargar Verovio') }))"
+    ></script>
     <script src="app.js" defer></script>
   </head>
   <body>
     <header class="app-header">
-      <h1>Conversor de partituras a MusicXML</h1>
-      <p>Sube una imagen de una partitura y obtén un archivo MusicXML procesado por el backend OMR.</p>
+      <div class="title-group">
+        <h1>Music Scanner</h1>
+        <p class="subtitle">Convierte imágenes de pentagramas a MusicXML sin instalar nada.</p>
+      </div>
+      <p class="badge">Funciona 100 % desde GitHub Pages</p>
     </header>
 
     <main class="app-main">
-      <section class="upload-section">
-        <label for="scoreFile" class="upload-label">Selecciona una imagen:</label>
-        <input id="scoreFile" type="file" accept=".png,.jpg,.jpeg,.pdf" />
-        <div id="pdfOptions" class="pdf-options hidden">
-          <label for="pageNumber" class="pdf-options-label">Selecciona la página a procesar:</label>
-          <div class="pdf-options-controls">
-            <input id="pageNumber" type="number" min="1" value="1" />
-            <span id="pageDetails" class="pdf-page-details">Procesará la página 1.</span>
-          </div>
-        </div>
-        <details class="advanced-options">
-          <summary>Opciones avanzadas</summary>
-          <div class="advanced-options-group">
-            <label for="processingMode" class="advanced-options-label">Modo de reconocimiento:</label>
-            <select id="processingMode" class="advanced-options-select">
-              <option value="auto">Automático</option>
-              <option value="printed">Impreso</option>
-              <option value="handwritten">Manuscrito</option>
-            </select>
-          </div>
-          <div class="advanced-options-group">
-            <label for="advancedParams" class="advanced-options-label">Parámetros adicionales para Audiveris:</label>
-            <input
-              id="advancedParams"
-              type="text"
-              class="advanced-options-input"
-              placeholder="Ejemplo: --engine printed"
-            />
-            <p class="advanced-options-help">
-              Se añadirán al comando utilizado para lanzar Audiveris. Ajusta los valores con cuidado.
-            </p>
-          </div>
-        </details>
-        <button id="processButton" type="button">Procesar partitura</button>
+      <section class="intro">
+        <p>
+          Esta versión de Music Scanner ejecuta todo el reconocimiento óptico de partituras directamente en tu navegador
+          mediante <strong>OpenCV.js</strong>. No hay servidores externos ni dependencias locales: abre esta página desde el
+          enlace público del repositorio y comienza a convertir.
+        </p>
+        <p class="note">
+          Por ahora se optimiza para partituras sencillas de una sola voz con figuras negras. Estamos trabajando para cubrir
+          más símbolos y configuraciones.
+        </p>
       </section>
 
-      <section class="backend-config-section">
-        <h2>Configuración del backend</h2>
-        <p id="backendStatus" class="status-message info">
-          Configura la URL del backend antes de procesar partituras.
-        </p>
-        <div class="backend-config-controls">
-          <label for="backendUrl" class="backend-config-label">URL del backend:</label>
-          <input
-            id="backendUrl"
-            type="url"
-            class="backend-config-input"
-            placeholder="https://tu-backend.example.com"
-            autocomplete="url"
-            spellcheck="false"
-          />
-          <div class="backend-config-buttons">
-            <button id="applyBackendUrl" type="button">Aplicar URL</button>
-            <button id="checkBackendButton" type="button" class="secondary">
-              Comprobar conexión
-            </button>
-            <button id="resetBackendUrl" type="button" class="link-button">
-              Restablecer valores
-            </button>
-          </div>
-          <p class="backend-config-help">
-            También puedes indicar la URL mediante el parámetro <code>?backend=https://tu-backend</code>
-            en el enlace de GitHub Pages. La aplicación la recordará en este navegador. Si introduces
-            <code>demo</code> como URL, se activará un modo de demostración que genera MusicXML de
-            ejemplo sin necesidad de backend.
+      <section class="upload" aria-labelledby="upload-title">
+        <h2 id="upload-title">1. Selecciona o arrastra una imagen</h2>
+        <div id="dropZone" class="drop-zone" role="button" tabindex="0">
+          <p class="drop-zone-instructions">
+            Arrastra aquí una imagen <span class="file-types">(PNG o JPG, ≤ 8&nbsp;MB)</span> o
+            <label for="scoreFile" class="file-label">búscala en tu equipo</label>.
           </p>
+          <p id="selectedFileInfo" class="selected-file hidden" aria-live="polite"></p>
+          <input id="scoreFile" type="file" accept=".png,.jpg,.jpeg" />
         </div>
+        <button id="processButton" type="button" class="primary">Procesar partitura</button>
+        <p id="status" class="status-message info">OpenCV inicializando…</p>
       </section>
 
-      <section class="status-section">
-        <h2>Estado</h2>
-        <p id="status" class="status-message info">Sin operaciones en curso.</p>
-      </section>
-
-      <section class="results-section">
-        <h2>Resultados</h2>
+      <section class="analysis" aria-labelledby="analysis-title">
+        <h2 id="analysis-title">2. Resultado</h2>
         <div id="results" class="results-container">
-          <p class="placeholder">Aquí aparecerá el enlace para descargar el MusicXML.</p>
+          <p class="placeholder">Cuando el análisis termine aparecerá aquí un enlace para descargar el MusicXML.</p>
+        </div>
+        <div id="analysisDetails" class="analysis-details hidden" aria-live="polite"></div>
+      </section>
+
+      <section class="preview" aria-labelledby="preview-title">
+        <h2 id="preview-title">3. Previsualización</h2>
+        <p id="previewStatus" class="status-message info">Aún no hay ningún archivo para mostrar.</p>
+        <div id="previewContent" class="preview-content" aria-live="polite">
+          <p class="placeholder">Genera un MusicXML para ver la partitura renderizada aquí mismo.</p>
         </div>
       </section>
 
-      <section class="preview-section">
-        <h2>Previsualización del MusicXML</h2>
-        <p id="previewStatus" class="preview-status status-message info">
-          La previsualización aparecerá aquí cuando haya un resultado disponible.
-        </p>
-        <div id="previewContent" class="preview-content">
-          <p class="placeholder">Todavía no hay ninguna previsualización disponible.</p>
-        </div>
-      </section>
-
-      <section class="history-section">
-        <h2>Historial de conversiones</h2>
+      <section class="history" aria-labelledby="history-title">
+        <h2 id="history-title">Historial reciente</h2>
         <div id="history" class="history-container">
-          <p class="placeholder">Todavía no has procesado ninguna partitura.</p>
+          <p class="placeholder">Tus últimas conversiones aparecerán en esta lista.</p>
         </div>
+      </section>
+
+      <section class="how-it-works" aria-labelledby="how-title">
+        <h2 id="how-title">¿Cómo funciona?</h2>
+        <ol>
+          <li>La imagen se procesa con filtros adaptativos para detectar líneas de pentagrama y notas.</li>
+          <li>Se identifican los centros de las cabezas de nota y se calcula su altura relativa.</li>
+          <li>Se genera un archivo MusicXML básico con valores de negra en compás 4/4.</li>
+        </ol>
+        <p>
+          El algoritmo está pensado para demostrar que es posible ejecutar OMR ligero en el navegador. Aporta tus mejoras en el
+          repositorio si quieres cubrir más notación.
+        </p>
       </section>
     </main>
 
     <footer class="app-footer">
-      <small>
-        Configura la URL del backend en <code>docs/config.js</code> antes de desplegar en GitHub Pages o
-        usa el modo <code>demo</code> para probar la interfaz sin instalaciones adicionales.
-      </small>
+      <p>
+        Código abierto en
+        <a href="https://github.com/jaimejaramilloarias/music-scanner" target="_blank" rel="noreferrer">GitHub</a>.
+        El procesamiento se ejecuta íntegramente en tu dispositivo.
+      </p>
     </footer>
   </body>
 </html>
