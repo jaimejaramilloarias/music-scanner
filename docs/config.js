@@ -7,7 +7,9 @@ window.OMR_CONFIG = window.OMR_CONFIG || {};
 // despliegues en GitHub Pages para que la aplicación funcione directamente
 // desde el enlace público sin necesidad de ajustes manuales. Cuando se
 // ejecute en local, la URL cambia automáticamente a ``http://localhost:8000``
-// para facilitar el desarrollo.
+// para facilitar el desarrollo. Si no hay un backend disponible, la
+// aplicación puede funcionar en "modo demostración" indicando "demo" como
+// URL o habilitando el modo automático definido más abajo.
 const DEFAULT_LOCAL_BACKEND_URL = "http://localhost:8000";
 const DEFAULT_PRODUCTION_BACKEND_URL = "https://music-scanner-backend.fly.dev";
 
@@ -32,6 +34,15 @@ if (typeof window.OMR_CONFIG.apiBaseUrl !== "string") {
   window.OMR_CONFIG.apiBaseUrl = isLocalhost(window.location.hostname)
     ? DEFAULT_LOCAL_BACKEND_URL
     : DEFAULT_PRODUCTION_BACKEND_URL;
+}
+
+// Permite habilitar o deshabilitar el modo de demostración del frontend.
+// Cuando está activo, si el backend no responde se genera un MusicXML
+// ficticio directamente en el navegador para mantener la experiencia 100 %
+// web. Puedes deshabilitarlo estableciendo la propiedad a ``false`` antes de
+// cargar ``app.js``.
+if (typeof window.OMR_CONFIG.enableDemoFallback !== "boolean") {
+  window.OMR_CONFIG.enableDemoFallback = true;
 }
 
 // Configuración de los modos de procesamiento disponibles en el frontend.
