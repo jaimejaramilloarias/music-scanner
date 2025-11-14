@@ -1,8 +1,8 @@
 """Configuración de la aplicación y utilidades relacionadas."""
 
-from functools import lru_cache
 import json
 import shlex
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -11,19 +11,20 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BASE_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_PUBLIC_BASE_URL = "http://localhost:8000"
 
 
 class Settings(BaseSettings):
     """Define la configuración del backend cargada desde variables de entorno."""
 
     allowed_origins: List[AnyHttpUrl] = [
-        "http://localhost:8000",
+        DEFAULT_PUBLIC_BASE_URL,
         "http://127.0.0.1:8000",
         "http://localhost:5500",
         "http://127.0.0.1:5500",
         "https://usuario.github.io",
     ]
-    public_base_url: AnyHttpUrl = "http://localhost:8000"
+    public_base_url: AnyHttpUrl = DEFAULT_PUBLIC_BASE_URL
     results_dir: Path = BASE_DIR / "output"
     audiveris_command: Optional[List[str]] = None
     audiveris_timeout: int = 300
@@ -134,6 +135,12 @@ class Settings(BaseSettings):
         """Devuelve la lista de modos de procesamiento configurados."""
 
         return list(self.audiveris_processing_presets.keys())
+
+    @property
+    def is_public_base_url_customized(self) -> bool:
+        """Indica si ``public_base_url`` ha sido personalizado."""
+
+        return str(self.public_base_url).rstrip("/") != DEFAULT_PUBLIC_BASE_URL
 
 
 @lru_cache()

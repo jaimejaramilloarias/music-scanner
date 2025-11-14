@@ -4,7 +4,7 @@ from pathlib import Path
 import shlex
 import tempfile
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import FileResponse
 
 from app.core import settings
@@ -19,8 +19,12 @@ MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 #: Tamaño máximo permitido (en bytes) para los archivos recibidos.
 
 
-@router.post("/omr", summary="Procesa una partitura y devuelve la URL del MusicXML")
+@router.post(
+    "/omr",
+    summary="Procesa una partitura y devuelve la URL del MusicXML",
+)
 async def process_score(
+    request: Request,
     file: UploadFile = File(...),
     page: int | None = Form(default=None),
     processing_mode: str | None = Form(default=None),
@@ -100,8 +104,16 @@ async def process_score(
     finally:
         temp_path.unlink(missing_ok=True)
 
-    base_url = str(settings.public_base_url).rstrip("/")
-    musicxml_url = f"{base_url}/api/files/musicxml/{result.result_id}"
+    if settings.is_public_base_url_customized:
+        base_url = str(settings.public_base_url).rstrip("/")
+        musicxml_url = f"{base_url}/api/files/musicxml/{result.result_id}"
+    else:
+        musicxml_url = str(
+            request.url_for(
+                "download_musicxml",
+                result_id=result.result_id,
+            )
+        )
 
     return {
         "status": "ok",
@@ -117,6 +129,7 @@ async def process_score(
 
 @router.get(
     "/files/musicxml/{result_id}",
+    name="download_musicxml",
     summary="Devuelve el archivo MusicXML generado para una partitura procesada",
 )
 async def download_musicxml(result_id: str) -> FileResponse:
